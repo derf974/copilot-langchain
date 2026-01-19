@@ -114,7 +114,7 @@ class TestCopilotChatModel:
 
             # Store the callback to trigger it later
             stored_callback = None
-            
+
             def mock_on(callback):
                 nonlocal stored_callback
                 stored_callback = callback
@@ -127,11 +127,14 @@ class TestCopilotChatModel:
                     class MockEvent:
                         class Type:
                             value = "assistant.message"
+
                         type = Type()
+
                         class Data:
                             content = "Hello from Copilot!"
+
                         data = Data()
-                    
+
                     await asyncio.sleep(0.01)  # Small delay to simulate async
                     stored_callback(MockEvent())
 
