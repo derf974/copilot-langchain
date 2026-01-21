@@ -35,6 +35,7 @@ git clone https://github.com/derf974/copilot-langchain.git
 cd copilot-langchain
 
 # Install with uv (recommended)
+uv venv
 uv sync
 uv pip install -e .
 
