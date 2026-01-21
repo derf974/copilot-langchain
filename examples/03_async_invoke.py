@@ -11,7 +11,7 @@ async def main():
     print("Example: Async Invoke")
     print("=" * 60)
 
-    model = CopilotChatModel(model_name="gpt-4o")
+    model = CopilotChatModel(model="gpt-4o")
 
     messages = [HumanMessage(content="Explain async programming in one sentence.")]
 

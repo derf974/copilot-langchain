@@ -10,7 +10,7 @@ def main():
     print("Example: Streaming")
     print("=" * 60)
 
-    model = CopilotChatModel(model_name="gpt-4o", streaming=True)
+    model = CopilotChatModel(model="gpt-4o", streaming=True)
 
     messages = [HumanMessage(content="Write a haiku about coding.")]
 
