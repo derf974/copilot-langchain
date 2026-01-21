@@ -244,7 +244,11 @@ class CopilotChatModel(BaseChatModel):
                 msg for msg in messages if not isinstance(msg, SystemMessage)
             ]
 
-            # Send the last non-system message and collect response
+            # Note: Currently only the last non-system message is sent.
+            # This is appropriate for single-turn conversations (the common case).
+            # For multi-turn conversations, the session would need to be persisted
+            # across multiple generate calls, which is not currently supported
+            # by this implementation. This is a known limitation.
             response_content = ""
             complete = asyncio.Event()
 
@@ -263,9 +267,8 @@ class CopilotChatModel(BaseChatModel):
             # Register event listener
             session.on(on_event)
 
-            # Send message with proper format
+            # Send the last non-system message
             if len(non_system_messages) > 0:
-                # Send the last non-system message with prompt format
                 await session.send({"prompt": non_system_messages[-1].content})
 
             # Wait for response
@@ -350,6 +353,12 @@ class CopilotChatModel(BaseChatModel):
                 msg for msg in messages if not isinstance(msg, SystemMessage)
             ]
 
+            # Note: Currently only the last non-system message is sent.
+            # This is appropriate for single-turn conversations (the common case).
+            # For multi-turn conversations, the session would need to be persisted
+            # across multiple generate calls, which is not currently supported
+            # by this implementation. This is a known limitation.
+
             # Queue to collect chunks
             chunk_queue: asyncio.Queue = asyncio.Queue()
             complete = asyncio.Event()
@@ -382,7 +391,7 @@ class CopilotChatModel(BaseChatModel):
             # Register event listener
             session.on(on_event)
 
-            # Send message with proper format
+            # Send the last non-system message
             if len(non_system_messages) > 0:
                 await session.send({"prompt": non_system_messages[-1].content})
 
