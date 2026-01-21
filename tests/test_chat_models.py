@@ -58,6 +58,7 @@ class TestCopilotChatModel:
         assert config["streaming"] is True
         assert config["temperature"] == 0.5
         assert config["max_tokens"] == 500
+        assert "system_message" not in config
 
     def test_create_session_config_defaults(self):
         """Test session configuration with default values."""
@@ -69,6 +70,43 @@ class TestCopilotChatModel:
         assert config["streaming"] is False
         assert "temperature" not in config
         assert "max_tokens" not in config
+        assert "system_message" not in config
+
+    def test_create_session_config_with_system_message(self):
+        """Test session configuration with system messages."""
+        model = CopilotChatModel()
+
+        messages = [
+            SystemMessage(content="You are a helpful assistant."),
+            HumanMessage(content="Hello!"),
+        ]
+
+        config = model._create_session_config(messages)
+
+        assert config["model"] == "gpt-4o"
+        assert "system_message" in config
+        assert config["system_message"]["mode"] == "replace"
+        assert config["system_message"]["content"] == "You are a helpful assistant."
+
+    def test_create_session_config_with_multiple_system_messages(self):
+        """Test session configuration with multiple system messages."""
+        model = CopilotChatModel()
+
+        messages = [
+            SystemMessage(content="You are a helpful assistant."),
+            SystemMessage(content="You speak French."),
+            HumanMessage(content="Hello!"),
+        ]
+
+        config = model._create_session_config(messages)
+
+        assert config["model"] == "gpt-4o"
+        assert "system_message" in config
+        assert config["system_message"]["mode"] == "replace"
+        assert (
+            config["system_message"]["content"]
+            == "You are a helpful assistant.\nYou speak French."
+        )
 
     @pytest.mark.asyncio
     async def test_get_client_creates_client(self):
@@ -162,6 +200,78 @@ class TestCopilotChatModel:
         model = CopilotChatModel(model="gpt-5")
         assert model.model_name == "gpt-5"
 
+    @pytest.mark.asyncio
+    async def test_agenerate_with_system_message(self):
+        """Test async generation with system messages."""
+        CopilotChatModel._shared_client = None
+
+        with patch("langchain_copilot.chat_models.CopilotClient") as mock_client_class:
+            # Setup mocks
+            mock_client = AsyncMock()
+            mock_session = AsyncMock()
+
+            # Store the callback to trigger it later
+            stored_callback = None
+            send_called_with = None
+
+            def mock_on(callback):
+                nonlocal stored_callback
+                stored_callback = callback
+
+            # Configure session.send to trigger the event
+            async def mock_send(message):
+                nonlocal send_called_with
+                send_called_with = message
+                # Simulate receiving a message after send
+                if stored_callback:
+                    # Create a mock event object
+                    class MockEvent:
+                        class Type:
+                            value = "assistant.message"
+
+                        type = Type()
+
+                        class Data:
+                            content = "Bonjour!"
+
+                        data = Data()
+
+                    await asyncio.sleep(0.01)  # Small delay to simulate async
+                    stored_callback(MockEvent())
+
+            mock_session.on = mock_on
+            mock_session.send = mock_send
+            mock_client_class.return_value = mock_client
+            mock_client.create_session = AsyncMock(return_value=mock_session)
+
+            model = CopilotChatModel()
+            messages = [
+                SystemMessage(content="You are a French translator."),
+                HumanMessage(content="Say hello"),
+            ]
+
+            result = await model._agenerate(messages)
+
+            # Verify result
+            assert len(result.generations) == 1
+            assert result.generations[0].message.content == "Bonjour!"
+
+            # Verify session was created with system message
+            mock_client.create_session.assert_called_once()
+            call_args = mock_client.create_session.call_args
+            session_config = call_args[0][0]
+            assert "system_message" in session_config
+            assert session_config["system_message"]["mode"] == "replace"
+            assert session_config["system_message"]["content"] == "You are a French translator."
+
+            # Verify only the human message was sent (not system message)
+            assert send_called_with is not None
+            assert send_called_with["prompt"] == "Say hello"
+
+            # Verify cleanup
+            mock_session.destroy.assert_called_once()
+            mock_client.stop.assert_called_once()
+
 
 class TestCopilotChatModelIntegration:
     """Integration tests (require actual Copilot CLI setup)."""
@@ -203,3 +313,39 @@ class TestCopilotChatModelIntegration:
         # Concatenate all chunks
         full_content = "".join(c.message.content for c in chunks)
         assert len(full_content) > 0
+
+    @pytest.mark.integration
+    def test_real_chain_with_system_message(self):
+        """Test real LangChain chain with system messages (requires Copilot CLI)."""
+        from langchain_core.prompts import ChatPromptTemplate
+        from langchain_core.output_parsers import StrOutputParser
+
+        model = CopilotChatModel(model_name="gpt-4o")
+
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                (
+                    "system",
+                    "You are a helpful assistant that translates {input_language} to {output_language}.",
+                ),
+                ("human", "{text}"),
+            ]
+        )
+
+        chain = prompt | model | StrOutputParser()
+
+        result = chain.invoke(
+            {
+                "input_language": "English",
+                "output_language": "French",
+                "text": "Hello, how are you?",
+            }
+        )
+
+        # Check that the result is in French (should contain typical French words)
+        # Not exact match since LLM output may vary
+        result_lower = result.lower()
+        assert any(
+            word in result_lower
+            for word in ["bonjour", "salut", "comment", "ça", "va", "allez"]
+        ), f"Expected French translation but got: {result}"

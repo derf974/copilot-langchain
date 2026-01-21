@@ -27,27 +27,16 @@ Before using this package, you need to have:
 
 ## Installation
 
-Using `uv` (recommended):
-
-```bash
-uv add langchain-copilot
-```
-
-Or with pip:
-
-```bash
-pip install langchain-copilot
-```
-
-For development:
+This package is not yet published to PyPI. For now, install directly from the repository:
 
 ```bash
 # Clone the repository
 git clone https://github.com/derf974/copilot-langchain.git
 cd copilot-langchain
 
-# Install with uv
+# Install with uv (recommended)
 uv sync
+uv pip install -e .
 
 # Or with pip
 pip install -e .
