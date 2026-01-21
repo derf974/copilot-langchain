@@ -11,7 +11,7 @@ def main():
     print("Example: LangChain Chain")
     print("=" * 60)
 
-    model = CopilotChatModel(model_name="gpt-4o")
+    model = CopilotChatModel(model="gpt-4o")
 
     prompt = ChatPromptTemplate.from_messages(
         [

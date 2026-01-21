@@ -262,11 +262,15 @@ class TestCopilotChatModel:
             session_config = call_args[0][0]
             assert "system_message" in session_config
             assert session_config["system_message"]["mode"] == "replace"
-            assert session_config["system_message"]["content"] == "You are a French translator."
+            assert (
+                session_config["system_message"]["content"]
+                == "You are a French translator."
+            )
 
-            # Verify only the human message was sent (not system message)
+            # Verify the full prompt (system + human message) was sent
             assert send_called_with is not None
-            assert send_called_with["prompt"] == "Say hello"
+            expected_prompt = "System: You are a French translator.\n\nSay hello"
+            assert send_called_with["prompt"] == expected_prompt
 
             # Verify cleanup
             mock_session.destroy.assert_called_once()

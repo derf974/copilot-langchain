@@ -168,7 +168,9 @@ class CopilotChatModel(BaseChatModel):
 
         # Extract system messages if provided
         if messages:
-            system_messages = [msg for msg in messages if isinstance(msg, SystemMessage)]
+            system_messages = [
+                msg for msg in messages if isinstance(msg, SystemMessage)
+            ]
             if system_messages:
                 # Concatenate all system messages
                 system_content = "\n".join(msg.content for msg in system_messages)
@@ -239,16 +241,33 @@ class CopilotChatModel(BaseChatModel):
         session = await client.create_session(session_config)
 
         try:
-            # Filter out system messages - they're already in session config
+            # Build the prompt with system messages prepended
+            # System messages are included in the prompt to ensure they are respected
+            system_messages = [
+                msg for msg in messages if isinstance(msg, SystemMessage)
+            ]
             non_system_messages = [
                 msg for msg in messages if not isinstance(msg, SystemMessage)
             ]
 
-            # Note: Currently only the last non-system message is sent.
-            # This is appropriate for single-turn conversations (the common case).
-            # For multi-turn conversations, the session would need to be persisted
-            # across multiple generate calls, which is not currently supported
-            # by this implementation. This is a known limitation.
+            # Construct the full prompt
+            prompt_parts = []
+            if system_messages:
+                # Prepend system messages as context
+                for sys_msg in system_messages:
+                    prompt_parts.append(f"System: {sys_msg.content}")
+
+            # Add the user message
+            if non_system_messages:
+                # Note: Currently only the last non-system message is sent.
+                # This is appropriate for single-turn conversations (the common case).
+                # For multi-turn conversations, the session would need to be persisted
+                # across multiple generate calls, which is not currently supported
+                # by this implementation. This is a known limitation.
+                prompt_parts.append(non_system_messages[-1].content)
+
+            full_prompt = "\n\n".join(prompt_parts)
+
             response_content = ""
             complete = asyncio.Event()
 
@@ -267,9 +286,9 @@ class CopilotChatModel(BaseChatModel):
             # Register event listener
             session.on(on_event)
 
-            # Send the last non-system message
-            if len(non_system_messages) > 0:
-                await session.send({"prompt": non_system_messages[-1].content})
+            # Send the full prompt (including system messages)
+            if full_prompt:
+                await session.send({"prompt": full_prompt})
 
             # Wait for response
             await complete.wait()
