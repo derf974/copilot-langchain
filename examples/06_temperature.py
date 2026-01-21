@@ -11,10 +11,10 @@ def main():
     print("=" * 60)
 
     # Lower temperature = more focused and deterministic
-    model_focused = CopilotChatModel(model_name="gpt-4o", temperature=0.1)
+    model_focused = CopilotChatModel(model="gpt-4o", temperature=0.1)
 
     # Higher temperature = more creative and random
-    model_creative = CopilotChatModel(model_name="gpt-4o", temperature=0.9)
+    model_creative = CopilotChatModel(model="gpt-4o", temperature=0.9)
 
     messages = [HumanMessage(content="Tell me a creative name for a coffee shop.")]
 
