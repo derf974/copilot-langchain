@@ -12,3 +12,5 @@ wheels/
 .pytest_cache/
 .ruff_cache/
 .blackd/
+
+.github/copilot-instructions.*
