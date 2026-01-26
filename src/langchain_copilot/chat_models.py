@@ -20,7 +20,7 @@ from langchain_core.messages import (
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from pydantic import ConfigDict, Field, model_validator
 
-from copilot import CopilotClient
+from copilot import CopilotClient, Tool
 import logging
 
 # Suppress AssertionError logging from the Copilot SDK's event deserialization
@@ -62,6 +62,7 @@ class CopilotChatModel(BaseChatModel):
     cli_url: Optional[str] = Field(default=None)
     temperature: Optional[float] = Field(default=None)
     max_tokens: Optional[int] = Field(default=None)
+    tools: Optional[list[Tool]] = Field(default=None)
 
     # Internal shared client (class variable)
     _shared_client: ClassVar[Optional[CopilotClient]] = None
@@ -165,7 +166,9 @@ class CopilotChatModel(BaseChatModel):
             config["temperature"] = self.temperature
         if self.max_tokens is not None:
             config["max_tokens"] = self.max_tokens
-
+        if self.tools is not None:
+            config["tools"] = self.tools
+            
         # Extract system messages if provided
         if messages:
             system_messages = [

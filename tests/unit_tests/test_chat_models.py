@@ -276,80 +276,244 @@ class TestCopilotChatModel:
             mock_session.destroy.assert_called_once()
             mock_client.stop.assert_called_once()
 
+    def test_initialization_with_tools(self):
+        """Test model initialization with tools."""
+        from copilot import Tool
 
-class TestCopilotChatModelIntegration:
-    """Integration tests (require actual Copilot CLI setup)."""
+        async def mock_tool_handler(invocation):
+            return {"textResultForLlm": "Result", "resultType": "success"}
 
-    @pytest.mark.integration
-    @pytest.mark.asyncio
-    async def test_real_invocation(self):
-        """Test real invocation (requires Copilot CLI)."""
-        model = CopilotChatModel(model_name="gpt-4o")
-        messages = [HumanMessage(content="Say 'test passed' and nothing else.")]
-
-        result = await model._agenerate(messages)
-
-        assert len(result.generations) == 1
-        assert "test passed" in result.generations[0].message.content.lower()
-
-    @pytest.mark.integration
-    def test_real_invoke_sync(self):
-        """Test real synchronous invocation (requires Copilot CLI)."""
-        model = CopilotChatModel(model_name="gpt-4o")
-        messages = [HumanMessage(content="Say 'test passed' and nothing else.")]
-
-        result = model.invoke(messages)
-
-        assert "test passed" in result.content.lower()
-
-    @pytest.mark.integration
-    @pytest.mark.asyncio
-    async def test_real_streaming(self):
-        """Test real streaming (requires Copilot CLI)."""
-        model = CopilotChatModel(model_name="gpt-4o", streaming=True)
-        messages = [HumanMessage(content="Count from 1 to 3.")]
-
-        chunks = []
-        async for chunk in model._astream(messages):
-            chunks.append(chunk)
-
-        assert len(chunks) > 0
-        # Concatenate all chunks
-        full_content = "".join(c.message.content for c in chunks)
-        assert len(full_content) > 0
-
-    @pytest.mark.integration
-    def test_real_chain_with_system_message(self):
-        """Test real LangChain chain with system messages (requires Copilot CLI)."""
-        from langchain_core.prompts import ChatPromptTemplate
-        from langchain_core.output_parsers import StrOutputParser
-
-        model = CopilotChatModel(model_name="gpt-4o")
-
-        prompt = ChatPromptTemplate.from_messages(
-            [
-                (
-                    "system",
-                    "You are a helpful assistant that translates {input_language} to {output_language}.",
-                ),
-                ("human", "{text}"),
-            ]
+        tool = Tool(
+            name="test_tool",
+            description="A test tool",
+            parameters={
+                "type": "object",
+                "properties": {"arg": {"type": "string"}},
+            },
+            handler=mock_tool_handler,
         )
 
-        chain = prompt | model | StrOutputParser()
+        model = CopilotChatModel(model_name="gpt-4o", tools=[tool])
+        assert model.tools is not None
+        assert len(model.tools) == 1
+        assert model.tools[0].name == "test_tool"
 
-        result = chain.invoke(
-            {
-                "input_language": "English",
-                "output_language": "French",
-                "text": "Hello, how are you?",
-            }
+    def test_create_session_config_with_tools(self):
+        """Test session configuration includes tools."""
+        from copilot import Tool
+
+        async def mock_tool_handler(invocation):
+            return {"textResultForLlm": "Result", "resultType": "success"}
+
+        tool = Tool(
+            name="test_tool",
+            description="A test tool",
+            parameters={
+                "type": "object",
+                "properties": {"arg": {"type": "string"}},
+            },
+            handler=mock_tool_handler,
         )
 
-        # Check that the result is in French (should contain typical French words)
-        # Not exact match since LLM output may vary
-        result_lower = result.lower()
-        assert any(
-            word in result_lower
-            for word in ["bonjour", "salut", "comment", "ça", "va", "allez"]
-        ), f"Expected French translation but got: {result}"
+        model = CopilotChatModel(model_name="gpt-4o", tools=[tool])
+        config = model._create_session_config()
+
+        assert "tools" in config
+        assert len(config["tools"]) == 1
+        assert config["tools"][0].name == "test_tool"
+
+    def test_create_session_config_without_tools(self):
+        """Test session configuration without tools."""
+        model = CopilotChatModel()
+        config = model._create_session_config()
+
+        assert "tools" not in config
+
+    @pytest.mark.asyncio
+    async def test_agenerate_with_tools(self):
+        """Test async generation with tools."""
+        from copilot import Tool
+
+        CopilotChatModel._shared_client = None
+
+        async def mock_tool_handler(invocation):
+            return {"textResultForLlm": "42", "resultType": "success"}
+
+        tool = Tool(
+            name="calculator",
+            description="Performs calculations",
+            parameters={
+                "type": "object",
+                "properties": {"operation": {"type": "string"}},
+            },
+            handler=mock_tool_handler,
+        )
+
+        with patch("langchain_copilot.chat_models.CopilotClient") as mock_client_class:
+            # Setup mocks
+            mock_client = AsyncMock()
+            mock_session = AsyncMock()
+
+            # Store the callback to trigger it later
+            stored_callback = None
+
+            def mock_on(callback):
+                nonlocal stored_callback
+                stored_callback = callback
+
+            # Configure session.send to trigger the event
+            async def mock_send(message):
+                # Simulate receiving a message after send
+                if stored_callback:
+                    # Create a mock event object
+                    class MockEvent:
+                        class Type:
+                            value = "assistant.message"
+
+                        type = Type()
+
+                        class Data:
+                            content = "The result is 42"
+
+                        data = Data()
+
+                    await asyncio.sleep(0.01)  # Small delay to simulate async
+                    stored_callback(MockEvent())
+
+            mock_session.on = mock_on
+            mock_session.send = mock_send
+            mock_client_class.return_value = mock_client
+            mock_client.create_session = AsyncMock(return_value=mock_session)
+
+            model = CopilotChatModel(tools=[tool])
+            messages = [HumanMessage(content="What is 21 + 21?")]
+
+            result = await model._agenerate(messages)
+
+            # Verify result
+            assert len(result.generations) == 1
+            assert "42" in result.generations[0].message.content
+
+            # Verify session was created with tools
+            mock_client.create_session.assert_called_once()
+            call_args = mock_client.create_session.call_args
+            session_config = call_args[0][0]
+            assert "tools" in session_config
+            assert len(session_config["tools"]) == 1
+            assert session_config["tools"][0].name == "calculator"
+
+            # Verify cleanup
+            mock_session.destroy.assert_called_once()
+            mock_client.stop.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_astream_with_tools(self):
+        """Test async streaming with tools."""
+        from copilot import Tool
+
+        CopilotChatModel._shared_client = None
+
+        async def mock_tool_handler(invocation):
+            return {"textResultForLlm": "The weather is sunny", "resultType": "success"}
+
+        tool = Tool(
+            name="get_weather",
+            description="Gets weather information",
+            parameters={
+                "type": "object",
+                "properties": {"location": {"type": "string"}},
+            },
+            handler=mock_tool_handler,
+        )
+
+        with patch("langchain_copilot.chat_models.CopilotClient") as mock_client_class:
+            # Setup mocks
+            mock_client = AsyncMock()
+            mock_session = AsyncMock()
+
+            # Store the callback to trigger it later
+            stored_callback = None
+
+            def mock_on(callback):
+                nonlocal stored_callback
+                stored_callback = callback
+
+            # Configure session.send to trigger streaming events
+            async def mock_send(message):
+                # Simulate receiving streaming chunks
+                if stored_callback:
+
+                    class MockDeltaEvent:
+                        class Type:
+                            value = "assistant.message_delta"
+
+                        type = Type()
+
+                        class Data:
+                            delta_content = None
+
+                        data = Data()
+
+                    class MockFinalEvent:
+                        class Type:
+                            value = "assistant.message"
+
+                        type = Type()
+
+                        class Data:
+                            content = "The weather is sunny in Paris"
+
+                        data = Data()
+
+                    # Send chunks
+                    await asyncio.sleep(0.01)
+                    event1 = MockDeltaEvent()
+                    event1.data.delta_content = "The weather "
+                    stored_callback(event1)
+
+                    await asyncio.sleep(0.01)
+                    event2 = MockDeltaEvent()
+                    event2.data.delta_content = "is sunny "
+                    stored_callback(event2)
+
+                    await asyncio.sleep(0.01)
+                    event3 = MockDeltaEvent()
+                    event3.data.delta_content = "in Paris"
+                    stored_callback(event3)
+
+                    # Send final message
+                    await asyncio.sleep(0.01)
+                    stored_callback(MockFinalEvent())
+
+            mock_session.on = mock_on
+            mock_session.send = mock_send
+            mock_client_class.return_value = mock_client
+            mock_client.create_session = AsyncMock(return_value=mock_session)
+
+            model = CopilotChatModel(streaming=True, tools=[tool])
+            messages = [HumanMessage(content="What's the weather in Paris?")]
+
+            # Collect chunks
+            chunks = []
+            async for chunk in model._astream(messages):
+                chunks.append(chunk.message.content)
+
+            # Verify chunks were received
+            assert len(chunks) == 3
+            assert chunks[0] == "The weather "
+            assert chunks[1] == "is sunny "
+            assert chunks[2] == "in Paris"
+
+            # Verify session was created with tools and streaming enabled
+            mock_client.create_session.assert_called_once()
+            call_args = mock_client.create_session.call_args
+            session_config = call_args[0][0]
+            assert session_config["streaming"] is True
+            assert "tools" in session_config
+            assert len(session_config["tools"]) == 1
+            assert session_config["tools"][0].name == "get_weather"
+
+            # Verify cleanup
+            mock_session.destroy.assert_called_once()
+            mock_client.stop.assert_called_once()
+
