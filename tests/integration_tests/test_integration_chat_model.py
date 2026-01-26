@@ -4,6 +4,7 @@ import pytest
 from langchain_core.messages import HumanMessage
 from langchain_copilot import CopilotChatModel
 
+
 class TestCopilotChatModelIntegration:
     """Integration tests (require actual Copilot CLI setup)."""
 

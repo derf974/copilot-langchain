@@ -9,7 +9,6 @@ To run these tests:
 
 from typing import Type
 
-import pytest
 from langchain_tests.integration_tests import ChatModelIntegrationTests
 
 from langchain_copilot import CopilotChatModel
@@ -17,10 +16,10 @@ from langchain_copilot import CopilotChatModel
 
 class TestCopilotChatModelIntegration(ChatModelIntegrationTests):
     """Standard integration tests for CopilotChatModel.
-    
+
     This class implements LangChain's standard test suite for chat models.
     Tests are automatically discovered and run by pytest.
-    
+
     The test suite validates that CopilotChatModel correctly implements
     the BaseChatModel interface and behaves as expected in real-world usage.
     """
@@ -33,7 +32,7 @@ class TestCopilotChatModelIntegration(ChatModelIntegrationTests):
     @property
     def chat_model_params(self) -> dict:
         """Return initialization parameters for the model.
-        
+
         These parameters will be used to instantiate CopilotChatModel
         for each test. Using gpt-4o with temperature=0 for deterministic
         responses in tests.

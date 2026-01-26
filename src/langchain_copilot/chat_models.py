@@ -168,7 +168,7 @@ class CopilotChatModel(BaseChatModel):
             config["max_tokens"] = self.max_tokens
         if self.tools is not None:
             config["tools"] = self.tools
-            
+
         # Extract system messages if provided
         if messages:
             system_messages = [

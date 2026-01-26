@@ -516,4 +516,3 @@ class TestCopilotChatModel:
             # Verify cleanup
             mock_session.destroy.assert_called_once()
             mock_client.stop.assert_called_once()
-

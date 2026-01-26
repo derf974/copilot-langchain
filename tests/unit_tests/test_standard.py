@@ -16,11 +16,11 @@ from langchain_copilot import CopilotChatModel
 
 class TestCopilotChatModelUnit(ChatModelUnitTests):
     """Standard unit tests for CopilotChatModel.
-    
+
     This class implements LangChain's standard unit test suite for chat models.
     Tests validate that CopilotChatModel correctly implements the BaseChatModel
     interface and handles initialization, serialization, and basic operations.
-    
+
     Unit tests run in isolation and do not require the Copilot CLI to be installed.
     """
 
@@ -32,7 +32,7 @@ class TestCopilotChatModelUnit(ChatModelUnitTests):
     @property
     def chat_model_params(self) -> dict:
         """Return initialization parameters for the model.
-        
+
         These parameters will be used to instantiate CopilotChatModel
         for each test. Using gpt-4o with temperature=0 for deterministic
         responses in tests.
