@@ -47,8 +47,8 @@ class TestCopilotChatModelUnit(ChatModelUnitTests):
 
     @property
     def has_tool_calling(self) -> bool:
-        """CopilotChatModel does not support tool calling (yet)."""
-        return False
+        """CopilotChatModel supports tool calling via bind_tools."""
+        return True
 
     @property
     def has_tool_choice(self) -> bool:

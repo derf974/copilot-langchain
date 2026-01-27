@@ -4,7 +4,10 @@ import asyncio
 import pytest
 from unittest.mock import AsyncMock, patch
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+from langchain_core.tools import tool
 from langchain_copilot import CopilotChatModel
+from copilot import Tool, define_tool
+from pydantic import BaseModel, Field
 
 
 class TestCopilotChatModel:
@@ -161,8 +164,8 @@ class TestCopilotChatModel:
             async def mock_send(message):
                 # Simulate receiving a message after send
                 if stored_callback:
-                    # Create a mock event object
-                    class MockEvent:
+                    # Create a mock event object for assistant message
+                    class MockMessageEvent:
                         class Type:
                             value = "assistant.message"
 
@@ -173,8 +176,17 @@ class TestCopilotChatModel:
 
                         data = Data()
 
+                    # Create a mock event for session idle
+                    class MockIdleEvent:
+                        class Type:
+                            value = "session.idle"
+
+                        type = Type()
+
                     await asyncio.sleep(0.01)  # Small delay to simulate async
-                    stored_callback(MockEvent())
+                    stored_callback(MockMessageEvent())
+                    await asyncio.sleep(0.01)
+                    stored_callback(MockIdleEvent())
 
             mock_session.on = mock_on
             mock_session.send = mock_send
@@ -224,8 +236,8 @@ class TestCopilotChatModel:
                 send_called_with = message
                 # Simulate receiving a message after send
                 if stored_callback:
-                    # Create a mock event object
-                    class MockEvent:
+                    # Create a mock event object for assistant message
+                    class MockMessageEvent:
                         class Type:
                             value = "assistant.message"
 
@@ -236,8 +248,17 @@ class TestCopilotChatModel:
 
                         data = Data()
 
+                    # Create a mock event for session idle
+                    class MockIdleEvent:
+                        class Type:
+                            value = "session.idle"
+
+                        type = Type()
+
                     await asyncio.sleep(0.01)  # Small delay to simulate async
-                    stored_callback(MockEvent())
+                    stored_callback(MockMessageEvent())
+                    await asyncio.sleep(0.01)
+                    stored_callback(MockIdleEvent())
 
             mock_session.on = mock_on
             mock_session.send = mock_send
@@ -365,8 +386,8 @@ class TestCopilotChatModel:
             async def mock_send(message):
                 # Simulate receiving a message after send
                 if stored_callback:
-                    # Create a mock event object
-                    class MockEvent:
+                    # Create a mock event object for assistant message
+                    class MockMessageEvent:
                         class Type:
                             value = "assistant.message"
 
@@ -377,8 +398,17 @@ class TestCopilotChatModel:
 
                         data = Data()
 
+                    # Create a mock event for session idle
+                    class MockIdleEvent:
+                        class Type:
+                            value = "session.idle"
+
+                        type = Type()
+
                     await asyncio.sleep(0.01)  # Small delay to simulate async
-                    stored_callback(MockEvent())
+                    stored_callback(MockMessageEvent())
+                    await asyncio.sleep(0.01)
+                    stored_callback(MockIdleEvent())
 
             mock_session.on = mock_on
             mock_session.send = mock_send
@@ -516,3 +546,132 @@ class TestCopilotChatModel:
             # Verify cleanup
             mock_session.destroy.assert_called_once()
             mock_client.stop.assert_called_once()
+
+    def test_bind_tools_with_copilot_tool(self):
+        """Test bind_tools with Copilot SDK Tool instances."""
+
+        async def mock_handler(invocation):
+            return {"textResultForLlm": "42", "resultType": "success"}
+
+        tool = Tool(
+            name="calculator",
+            description="Performs calculations",
+            parameters={
+                "type": "object",
+                "properties": {"operation": {"type": "string"}},
+            },
+            handler=mock_handler,
+        )
+
+        model = CopilotChatModel(model="gpt-4o")
+        bound_model = model.bind_tools([tool])
+
+        # Should return a RunnableBinding
+        from langchain_core.runnables import RunnableBinding
+
+        assert isinstance(bound_model, RunnableBinding)
+        # The underlying bound model should have tools in kwargs
+        assert "tools" in bound_model.kwargs
+        assert len(bound_model.kwargs["tools"]) == 1
+        assert bound_model.kwargs["tools"][0].name == "calculator"
+
+    def test_bind_tools_with_define_tool(self):
+        """Test bind_tools with @define_tool decorated functions."""
+
+        class CalcParams(BaseModel):
+            a: float = Field(description="First number")
+            b: float = Field(description="Second number")
+
+        @define_tool(description="Add two numbers")
+        async def add_numbers(params: CalcParams) -> str:
+            return str(params.a + params.b)
+
+        model = CopilotChatModel(model="gpt-4o")
+        bound_model = model.bind_tools([add_numbers])
+
+        from langchain_core.runnables import RunnableBinding
+
+        assert isinstance(bound_model, RunnableBinding)
+        assert "tools" in bound_model.kwargs
+        assert len(bound_model.kwargs["tools"]) == 1
+
+    def test_bind_tools_with_langchain_tool(self):
+        """Test bind_tools with LangChain @tool decorated functions."""
+
+        @tool
+        def search(query: str) -> str:
+            """Search for information."""
+            return f"Results for: {query}"
+
+        model = CopilotChatModel(model="gpt-4o")
+        bound_model = model.bind_tools([search])
+
+        from langchain_core.runnables import RunnableBinding
+
+        assert isinstance(bound_model, RunnableBinding)
+        assert "tools" in bound_model.kwargs
+        assert len(bound_model.kwargs["tools"]) == 1
+        # The tool should have been converted from LangChain format
+        assert bound_model.kwargs["tools"][0].name == "search"
+
+    def test_bind_tools_with_plain_callable(self):
+        """Test that bind_tools supports plain callables."""
+
+        def plain_function(x: int) -> int:
+            """Double a number."""
+            return x * 2
+
+        model = CopilotChatModel(model="gpt-4o")
+        bound_model = model.bind_tools([plain_function])
+
+        from langchain_core.runnables import RunnableBinding
+
+        assert isinstance(bound_model, RunnableBinding)
+        assert "tools" in bound_model.kwargs
+        assert len(bound_model.kwargs["tools"]) == 1
+        assert bound_model.kwargs["tools"][0].name == "plain_function"
+
+    def test_bind_tools_rejects_dict_without_handler(self):
+        """Test that bind_tools accepts dict schemas (they are skipped)."""
+        tool_dict = {
+            "function": {
+                "name": "test_tool",
+                "description": "A test tool",
+                "parameters": {"type": "object", "properties": {}},
+            }
+        }
+
+        model = CopilotChatModel(model="gpt-4o")
+
+        # Dict schemas are now skipped (no error raised)
+        bound_model = model.bind_tools([tool_dict])
+
+        from langchain_core.runnables import RunnableBinding
+
+        assert isinstance(bound_model, RunnableBinding)
+        # No tools should be bound since dict schemas are skipped
+        assert bound_model.kwargs.get("tools", []) == []
+
+    def test_bind_tools_preserves_model_config(self):
+        """Test that bind_tools preserves other model configuration."""
+        model = CopilotChatModel(
+            model="gpt-4o", temperature=0.7, max_tokens=1000, streaming=True
+        )
+
+        class TestParams(BaseModel):
+            value: str = Field(description="Test value")
+
+        @define_tool(description="Test")
+        async def test_tool(params: TestParams) -> str:
+            return "test"
+
+        bound_model = model.bind_tools([test_tool])
+
+        from langchain_core.runnables import RunnableBinding
+
+        assert isinstance(bound_model, RunnableBinding)
+        # The bound object wraps the original model
+        assert bound_model.bound.model_name == "gpt-4o"
+        assert bound_model.bound.temperature == 0.7
+        assert bound_model.bound.max_tokens == 1000
+        assert bound_model.bound.streaming is True

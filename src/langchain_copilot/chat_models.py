@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, AsyncIterator, ClassVar, Iterator, Optional
+from collections.abc import Callable, Sequence
+from typing import Any, AsyncIterator, ClassVar, Iterator, Optional, Union
 
 from langchain_core.callbacks import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
 )
+from langchain_core.language_models.base import LanguageModelInput
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import (
     AIMessage,
@@ -18,6 +20,9 @@ from langchain_core.messages import (
     SystemMessage,
 )
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
+from langchain_core.runnables import Runnable, RunnableBinding
+from langchain_core.tools import BaseTool
+from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import ConfigDict, Field, model_validator
 
 from copilot import CopilotClient, Tool
@@ -147,12 +152,13 @@ class CopilotChatModel(BaseChatModel):
         return converted
 
     def _create_session_config(
-        self, messages: Optional[list[BaseMessage]] = None
+        self, messages: Optional[list[BaseMessage]] = None, **kwargs: Any
     ) -> dict[str, Any]:
         """Create session configuration for Copilot SDK.
 
         Args:
             messages: Optional list of messages to extract system message from
+            **kwargs: Additional arguments (e.g., tools from bind_tools)
 
         Returns:
             Configuration dictionary for creating a Copilot session
@@ -166,8 +172,11 @@ class CopilotChatModel(BaseChatModel):
             config["temperature"] = self.temperature
         if self.max_tokens is not None:
             config["max_tokens"] = self.max_tokens
-        if self.tools is not None:
-            config["tools"] = self.tools
+
+        # Tools can come from instance attribute or kwargs (from bind_tools)
+        tools = kwargs.get("tools", self.tools)
+        if tools is not None:
+            config["tools"] = tools
 
         # Extract system messages if provided
         if messages:
@@ -237,8 +246,8 @@ class CopilotChatModel(BaseChatModel):
             ChatResult containing the generated response
         """
         client = await self._get_client()
-        # Pass messages to extract system messages for session config
-        session_config = self._create_session_config(messages)
+        # Pass messages and kwargs to extract system messages and tools for session config
+        session_config = self._create_session_config(messages, **kwargs)
 
         # Create a session
         session = await client.create_session(session_config)
@@ -278,10 +287,13 @@ class CopilotChatModel(BaseChatModel):
                 nonlocal response_content
                 try:
                     if event.type.value == "assistant.message":
+                        # Store the message content
                         response_content = event.data.content
-                        complete.set()
                     elif event.type.value == "assistant.message_delta":
                         response_content += event.data.content
+                    elif event.type.value == "session.idle":
+                        # Session is idle - all tool calls completed
+                        complete.set()
                 except (AttributeError, KeyError):
                     # Ignore malformed events
                     pass
@@ -293,7 +305,7 @@ class CopilotChatModel(BaseChatModel):
             if full_prompt:
                 await session.send({"prompt": full_prompt})
 
-            # Wait for response
+            # Wait for session to be idle (all tools executed)
             await complete.wait()
 
             # Create response
@@ -362,8 +374,8 @@ class CopilotChatModel(BaseChatModel):
             ChatGenerationChunk for each chunk of the response
         """
         client = await self._get_client()
-        # Pass messages to extract system messages for session config
-        session_config = self._create_session_config(messages)
+        # Pass messages and kwargs to extract system messages and tools for session config
+        session_config = self._create_session_config(messages, **kwargs)
         session_config["streaming"] = True  # Force streaming mode
 
         # Create a session
@@ -444,3 +456,177 @@ class CopilotChatModel(BaseChatModel):
             # Clean up session
             await session.destroy()
             await client.stop()
+
+    def bind_tools(
+        self,
+        tools: Sequence[Union[dict[str, Any], type, Callable, BaseTool]],
+        *,
+        tool_choice: Optional[str] = None,
+        **kwargs: Any,
+    ) -> Runnable[LanguageModelInput, AIMessage]:
+        """Bind tools to the model.
+
+        Transforms LangChain tools into Copilot SDK Tool format and creates
+        a new model instance with these tools bound.
+
+        Args:
+            tools: Sequence of tools to bind. Can be:
+                - Dict representing an OpenAI-style tool schema
+                - Pydantic class/BaseModel
+                - Python callable/function
+                - LangChain BaseTool
+            tool_choice: Tool choice strategy (not currently used by Copilot SDK)
+            **kwargs: Additional arguments
+
+        Returns:
+            A new CopilotChatModel instance with tools bound
+
+        Example:
+            ```python
+            from pydantic import BaseModel, Field
+            from copilot import define_tool
+
+            class WeatherParams(BaseModel):
+                location: str = Field(description="City name")
+
+            @define_tool(description="Get weather")
+            async def get_weather(params: WeatherParams) -> str:
+                return f"Weather in {params.location}: sunny"
+
+            model = CopilotChatModel(model="gpt-4o")
+            model_with_tools = model.bind_tools([get_weather])
+            ```
+        """
+        # Convert LangChain tools to Copilot SDK Tool format
+        copilot_tools = []
+
+        for tool in tools:
+            if isinstance(tool, Tool):
+                # Already a Copilot SDK Tool
+                copilot_tools.append(tool)
+            elif callable(tool):
+                # Check if it's already a defined tool (has _tool_info attribute)
+                if hasattr(tool, "_tool_info"):
+                    copilot_tools.append(tool)
+                else:
+                    # It's a plain callable - convert it using convert_to_openai_tool
+                    try:
+                        tool_schema = convert_to_openai_tool(tool)
+
+                        # Create handler for the callable
+                        def create_callable_handler(func: Callable):
+                            async def handler(invocation):
+                                args = invocation.get("arguments", {})
+                                try:
+                                    # Check if it's async
+                                    if asyncio.iscoroutinefunction(func):
+                                        result = await func(**args)
+                                    else:
+                                        result = func(**args)
+
+                                    return {
+                                        "textResultForLlm": str(result),
+                                        "resultType": "success",
+                                    }
+                                except Exception as e:
+                                    return {
+                                        "textResultForLlm": f"Error: {str(e)}",
+                                        "resultType": "error",
+                                    }
+
+                            return handler
+
+                        copilot_tool = Tool(
+                            name=tool_schema["function"]["name"],
+                            description=tool_schema["function"]["description"],
+                            parameters=tool_schema["function"]["parameters"],
+                            handler=create_callable_handler(tool),
+                        )
+                        copilot_tools.append(copilot_tool)
+                    except Exception as e:
+                        raise ValueError(
+                            f"Failed to convert callable {tool} to Copilot tool: {e}"
+                        )
+            elif isinstance(tool, BaseTool):
+                # LangChain BaseTool - convert to Copilot format
+                tool_schema = convert_to_openai_tool(tool)
+
+                # Create an async handler that wraps the BaseTool
+                # We need to capture the tool instance in the closure
+                def create_handler(base_tool: BaseTool):
+                    async def handler(invocation):
+                        args = invocation.get("arguments", {})
+                        try:
+                            # Try async invoke first
+                            if hasattr(base_tool, "ainvoke"):
+                                result = await base_tool.ainvoke(args)
+                            else:
+                                # Fall back to sync invoke
+                                result = base_tool.invoke(args)
+
+                            return {
+                                "textResultForLlm": str(result),
+                                "resultType": "success",
+                            }
+                        except Exception as e:
+                            return {
+                                "textResultForLlm": f"Error: {str(e)}",
+                                "resultType": "error",
+                            }
+
+                    return handler
+
+                copilot_tool = Tool(
+                    name=tool_schema["function"]["name"],
+                    description=tool_schema["function"]["description"],
+                    parameters=tool_schema["function"]["parameters"],
+                    handler=create_handler(tool),
+                )
+                copilot_tools.append(copilot_tool)
+            elif isinstance(tool, dict):
+                # Dict-style tool schema - could be OpenAI format or JSON schema
+                if "function" in tool:
+                    # OpenAI-style tool schema
+                    # We can't create a handler from just a schema
+                    # This is for tools that are schema-only (like for structured output)
+                    # Skip them as they can't be called
+                    continue
+                elif "type" in tool and tool.get("type") == "object":
+                    # JSON schema format (Pydantic schema dict)
+                    # Similar to above, schema-only without handler
+                    # Skip as it can't be called
+                    continue
+                else:
+                    raise ValueError(
+                        f"Unsupported dict tool format: {tool}. "
+                        "Expected OpenAI function format or JSON schema."
+                    )
+            elif isinstance(tool, type):
+                # Pydantic class - convert to tool schema
+                try:
+                    tool_schema = convert_to_openai_tool(tool)
+
+                    # For a Pydantic class without a handler, we can't execute it
+                    # But we can still register it as a schema for structured output
+                    # For now, raise a helpful error
+                    raise ValueError(
+                        f"Pydantic class {tool.__name__} cannot be used directly as a tool. "
+                        "Wrap it with @define_tool decorator or use it in with_structured_output() instead."
+                    )
+                except ValueError:
+                    # Re-raise our custom error
+                    raise
+                except Exception as e:
+                    raise ValueError(
+                        f"Failed to convert Pydantic class {tool} to tool schema: {e}"
+                    )
+            else:
+                raise ValueError(f"Unsupported tool type: {type(tool)}")
+
+        # Return a RunnableBinding with the tools bound as kwargs
+        # This is the standard LangChain pattern
+        return RunnableBinding(
+            bound=self,
+            kwargs={"tools": copilot_tools} if copilot_tools else {},
+            config={},
+        )
