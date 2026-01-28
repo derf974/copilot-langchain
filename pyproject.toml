@@ -12,7 +12,7 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
-    "github-copilot-sdk==0.1.18",
+    "github-copilot-sdk==0.1.19",
     "langchain-core>=1.2.7",
     "pydantic>=2.12.5",
 ]
