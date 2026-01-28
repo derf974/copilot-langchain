@@ -14,3 +14,4 @@ wheels/
 .blackd/
 
 .github/copilot-instructions.*
+.github/SDK*

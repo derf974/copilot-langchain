@@ -194,17 +194,66 @@ uv run python examples/basic_usage.py
 
 ## Testing
 
-Run the test suite:
+The project uses both unit tests and integration tests following LangChain's standard test suite.
+
+### Unit Tests
+
+Unit tests use [langchain-tests](https://pypi.org/project/langchain-tests/) standard unit test suite and validate the model in isolation without external dependencies:
 
 ```bash
-# Run unit tests (no Copilot CLI required)
-uv run pytest tests/ -v
+# Run all unit tests (custom + standard)
+make test
 
-# Run integration tests (requires Copilot CLI setup)
-uv run pytest tests/ -v -m integration
+# Run only standard unit tests
+uv run pytest tests/unit_tests/ -v
 
+# Run only custom unit tests
+uv run pytest tests/test_chat_models.py::TestCopilotChatModel -v
+```
+
+Unit tests validate:
+- ✅ Model initialization and configuration
+- ✅ Streaming mode initialization
+- ✅ Standard parameters generation
+- ✅ Tool binding (validates interface even though not supported yet)
+- ✅ Structured output interface (validates interface even though not supported yet)
+- ✅ Serialization/deserialization (when implemented)
+- ✅ Initialization performance
+
+### Integration Tests
+
+Integration tests use [langchain-tests](https://pypi.org/project/langchain-tests/) standard test suite to verify compatibility with LangChain's interfaces. These tests require the GitHub Copilot CLI to be installed and configured:
+
+```bash
+# Ensure Copilot CLI is set up
+copilot --version
+
+# Run integration tests
+make integration-test
+
+# Or manually
+uv run pytest tests/integration_tests/ -v -m integration
+```
+
+The integration test suite validates:
+- ✅ Basic invoke/ainvoke operations
+- ✅ Streaming (stream/astream)
+- ✅ Batch operations
+- ✅ Multi-turn conversations
+- ✅ Stop sequences
+- ✅ Model override at runtime
+- ❌ Tool calling (not yet supported)
+- ❌ Structured output (not yet supported)
+- ❌ Multimodal inputs (not yet supported)
+
+### Running All Tests
+
+```bash
 # Run all tests
-uv run pytest tests/ -v --run-integration
+make test-all
+
+# Or manually
+uv run pytest tests/ -v
 ```
 
 ## Architecture
@@ -230,7 +279,7 @@ Streaming converts Copilot's event-based model (`assistant.message_delta` events
 - ✅ Streaming support
 - ✅ Async operations
 - ✅ Temperature and token controls
-- 🔲 Tool/Function calling support (planned for v0.2.0)
+- ✅ Tool/Function calling support (planned for v0.2.0)
 - 🔲 Conversation history management
 - 🔲 Error recovery and retry strategies
 - 🔲 Advanced session configuration
