@@ -15,16 +15,17 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
 ]
 
-[project.urls]
-Homepage = "https://github.com/derf974/copilot-langchain"
-Repository = "https://github.com/derf974/copilot-langchain"
-Issues = "https://github.com/derf974/copilot-langchain/issues"
-Changelog = "https://github.com/derf974/copilot-langchain/blob/main/CHANGELOG.md"
 dependencies = [
     "github-copilot-sdk==0.1.19",
     "langchain-core>=1.2.7",
     "pydantic>=2.12.5",
 ]
+
+[project.urls]
+Homepage = "https://github.com/derf974/copilot-langchain"
+Repository = "https://github.com/derf974/copilot-langchain"
+Issues = "https://github.com/derf974/copilot-langchain/issues"
+Changelog = "https://github.com/derf974/copilot-langchain/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = [
