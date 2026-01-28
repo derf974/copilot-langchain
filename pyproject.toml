@@ -4,6 +4,9 @@ version = "0.2.0"
 description = "LangChain integration for GitHub Copilot SDK"
 readme = "README.md"
 requires-python = ">=3.13.0"
+authors = [
+    { name = "derf974", email = "derf974@users.noreply.github.com" },
+]
 keywords = ["langchain", "copilot", "github", "llm", "ai"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -11,6 +14,12 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3.13",
 ]
+
+[project.urls]
+Homepage = "https://github.com/derf974/copilot-langchain"
+Repository = "https://github.com/derf974/copilot-langchain"
+Issues = "https://github.com/derf974/copilot-langchain/issues"
+Changelog = "https://github.com/derf974/copilot-langchain/blob/main/CHANGELOG.md"
 dependencies = [
     "github-copilot-sdk==0.1.19",
     "langchain-core>=1.2.7",
@@ -32,3 +41,6 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/langchain_copilot"]
+
+[tool.hatch.version]
+path = "src/langchain_copilot/__init__.py"
