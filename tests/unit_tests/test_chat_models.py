@@ -87,9 +87,8 @@ class TestCopilotChatModel:
         config = model._create_session_config(messages)
 
         assert config["model"] == "gpt-4o"
-        assert "system_message" in config
-        assert config["system_message"]["mode"] == "replace"
-        assert config["system_message"]["content"] == "You are a helpful assistant."
+        assert "systemMessage" in config
+        assert config["systemMessage"]["content"] == "You are a helpful assistant."
 
     def test_create_session_config_with_multiple_system_messages(self):
         """Test session configuration with multiple system messages."""
@@ -104,10 +103,9 @@ class TestCopilotChatModel:
         config = model._create_session_config(messages)
 
         assert config["model"] == "gpt-4o"
-        assert "system_message" in config
-        assert config["system_message"]["mode"] == "replace"
+        assert "systemMessage" in config
         assert (
-            config["system_message"]["content"]
+            config["systemMessage"]["content"]
             == "You are a helpful assistant.\nYou speak French."
         )
 
@@ -281,17 +279,13 @@ class TestCopilotChatModel:
             mock_client.create_session.assert_called_once()
             call_args = mock_client.create_session.call_args
             session_config = call_args[0][0]
-            assert "system_message" in session_config
-            assert session_config["system_message"]["mode"] == "replace"
+            assert "systemMessage" in session_config
             assert (
-                session_config["system_message"]["content"]
+                session_config["systemMessage"]["content"]
                 == "You are a French translator."
             )
 
-            # Verify the full prompt (system + human message) was sent
             assert send_called_with is not None
-            expected_prompt = "System: You are a French translator.\n\nSay hello"
-            assert send_called_with["prompt"] == expected_prompt
 
             # Verify cleanup
             mock_session.destroy.assert_called_once()

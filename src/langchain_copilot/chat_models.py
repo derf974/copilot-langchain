@@ -18,6 +18,7 @@ from langchain_core.messages import (
     BaseMessage,
     HumanMessage,
     SystemMessage,
+    ToolMessage,
 )
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from langchain_core.runnables import Runnable, RunnableBinding
@@ -185,13 +186,30 @@ class CopilotChatModel(BaseChatModel):
             ]
             if system_messages:
                 # Concatenate all system messages
-                system_content = "\n".join(msg.content for msg in system_messages)
-                config["system_message"] = {
-                    "mode": "replace",
+                system_content = "\n".join(
+                    (
+                        str(msg.content)
+                        if isinstance(msg.content, str)
+                        else str(msg.content)
+                    )
+                    for msg in system_messages
+                )
+                config["systemMessage"] = {
                     "content": system_content,
                 }
 
         return config
+
+    def _messages_to_prompt(self, messages: list[BaseMessage]) -> str:
+        parts = []
+        for msg in messages:
+            if isinstance(msg, HumanMessage):
+                parts.append(f"User: {msg.content}")
+            elif isinstance(msg, AIMessage):
+                parts.append(f"Assistant: {msg.content}")
+            elif isinstance(msg, ToolMessage):
+                parts.append(f"Tool: {msg.content}")
+        return "\n\n".join(parts)
 
     def _generate(
         self,
@@ -253,32 +271,7 @@ class CopilotChatModel(BaseChatModel):
         session = await client.create_session(session_config)
 
         try:
-            # Build the prompt with system messages prepended
-            # System messages are included in the prompt to ensure they are respected
-            system_messages = [
-                msg for msg in messages if isinstance(msg, SystemMessage)
-            ]
-            non_system_messages = [
-                msg for msg in messages if not isinstance(msg, SystemMessage)
-            ]
-
-            # Construct the full prompt
-            prompt_parts = []
-            if system_messages:
-                # Prepend system messages as context
-                for sys_msg in system_messages:
-                    prompt_parts.append(f"System: {sys_msg.content}")
-
-            # Add the user message
-            if non_system_messages:
-                # Note: Currently only the last non-system message is sent.
-                # This is appropriate for single-turn conversations (the common case).
-                # For multi-turn conversations, the session would need to be persisted
-                # across multiple generate calls, which is not currently supported
-                # by this implementation. This is a known limitation.
-                prompt_parts.append(non_system_messages[-1].content)
-
-            full_prompt = "\n\n".join(prompt_parts)
+            full_prompt = self._messages_to_prompt(messages)
 
             response_content = ""
             complete = asyncio.Event()
@@ -382,16 +375,7 @@ class CopilotChatModel(BaseChatModel):
         session = await client.create_session(session_config)
 
         try:
-            # Filter out system messages - they're already in session config
-            non_system_messages = [
-                msg for msg in messages if not isinstance(msg, SystemMessage)
-            ]
-
-            # Note: Currently only the last non-system message is sent.
-            # This is appropriate for single-turn conversations (the common case).
-            # For multi-turn conversations, the session would need to be persisted
-            # across multiple generate calls, which is not currently supported
-            # by this implementation. This is a known limitation.
+            full_prompt = self._messages_to_prompt(messages)
 
             # Queue to collect chunks
             chunk_queue: asyncio.Queue = asyncio.Queue()
@@ -426,8 +410,8 @@ class CopilotChatModel(BaseChatModel):
             session.on(on_event)
 
             # Send the last non-system message
-            if len(non_system_messages) > 0:
-                await session.send({"prompt": non_system_messages[-1].content})
+            if len(messages) > 0:
+                await session.send({"prompt": full_prompt})
 
             # Yield chunks as they arrive
             while not complete.is_set() or not chunk_queue.empty():
