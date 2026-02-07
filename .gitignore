@@ -13,5 +13,6 @@ wheels/
 .ruff_cache/
 .blackd/
 
-.github/copilot-instructions.*
+.github/*.md
 .github/SDK*
+.coverage

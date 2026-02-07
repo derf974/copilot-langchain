@@ -27,6 +27,8 @@ from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import ConfigDict, Field, model_validator
 
 from copilot import CopilotClient, Tool
+from copilot.types import SessionConfig, SystemMessageReplaceConfig
+
 import logging
 
 # Suppress AssertionError logging from the Copilot SDK's event deserialization
@@ -154,7 +156,7 @@ class CopilotChatModel(BaseChatModel):
 
     def _create_session_config(
         self, messages: Optional[list[BaseMessage]] = None, **kwargs: Any
-    ) -> dict[str, Any]:
+    ) -> SessionConfig:
         """Create session configuration for Copilot SDK.
 
         Args:
@@ -164,20 +166,11 @@ class CopilotChatModel(BaseChatModel):
         Returns:
             Configuration dictionary for creating a Copilot session
         """
-        config = {
+        config_params = {
             "model": self.model_name,
             "streaming": self.streaming,
+            "tools": kwargs.get("tools", self.tools),
         }
-
-        if self.temperature is not None:
-            config["temperature"] = self.temperature
-        if self.max_tokens is not None:
-            config["max_tokens"] = self.max_tokens
-
-        # Tools can come from instance attribute or kwargs (from bind_tools)
-        tools = kwargs.get("tools", self.tools)
-        if tools is not None:
-            config["tools"] = tools
 
         # Extract system messages if provided
         if messages:
@@ -187,11 +180,12 @@ class CopilotChatModel(BaseChatModel):
             if system_messages:
                 # Concatenate all system messages
                 system_content = "\n".join(str(msg.content) for msg in system_messages)
-                config["systemMessage"] = {
-                    "content": system_content,
-                }
+                config_params["system_message"] = SystemMessageReplaceConfig(
+                    mode="replace",
+                    content=system_content,
+                )
 
-        return config
+        return SessionConfig(**config_params)
 
     def _messages_to_prompt(self, messages: list[BaseMessage]) -> str:
         parts = []

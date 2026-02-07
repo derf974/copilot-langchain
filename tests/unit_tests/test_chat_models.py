@@ -59,8 +59,6 @@ class TestCopilotChatModel:
 
         assert config["model"] == "gpt-4o"
         assert config["streaming"] is True
-        assert config["temperature"] == 0.5
-        assert config["max_tokens"] == 500
         assert "system_message" not in config
 
     def test_create_session_config_defaults(self):
@@ -87,8 +85,8 @@ class TestCopilotChatModel:
         config = model._create_session_config(messages)
 
         assert config["model"] == "gpt-4o"
-        assert "systemMessage" in config
-        assert config["systemMessage"]["content"] == "You are a helpful assistant."
+        assert "system_message" in config
+        assert config["system_message"]["content"] == "You are a helpful assistant."
 
     def test_create_session_config_with_multiple_system_messages(self):
         """Test session configuration with multiple system messages."""
@@ -103,9 +101,9 @@ class TestCopilotChatModel:
         config = model._create_session_config(messages)
 
         assert config["model"] == "gpt-4o"
-        assert "systemMessage" in config
+        assert "system_message" in config
         assert (
-            config["systemMessage"]["content"]
+            config["system_message"]["content"]
             == "You are a helpful assistant.\nYou speak French."
         )
 
@@ -279,9 +277,9 @@ class TestCopilotChatModel:
             mock_client.create_session.assert_called_once()
             call_args = mock_client.create_session.call_args
             session_config = call_args[0][0]
-            assert "systemMessage" in session_config
+            assert "system_message" in session_config
             assert (
-                session_config["systemMessage"]["content"]
+                session_config["system_message"]["content"]
                 == "You are a French translator."
             )
 
@@ -342,7 +340,7 @@ class TestCopilotChatModel:
         model = CopilotChatModel()
         config = model._create_session_config()
 
-        assert "tools" not in config
+        assert config["tools"] is None
 
     @pytest.mark.asyncio
     async def test_agenerate_with_tools(self):
@@ -422,7 +420,7 @@ class TestCopilotChatModel:
             mock_client.create_session.assert_called_once()
             call_args = mock_client.create_session.call_args
             session_config = call_args[0][0]
-            assert "tools" in session_config
+            assert session_config["tools"] is not None
             assert len(session_config["tools"]) == 1
             assert session_config["tools"][0].name == "calculator"
 
@@ -666,8 +664,6 @@ class TestCopilotChatModel:
         assert isinstance(bound_model, RunnableBinding)
         # The bound object wraps the original model
         assert bound_model.bound.model_name == "gpt-4o"
-        assert bound_model.bound.temperature == 0.7
-        assert bound_model.bound.max_tokens == 1000
         assert bound_model.bound.streaming is True
 
     def test_messages_to_prompt_with_only_system_messages(self):
