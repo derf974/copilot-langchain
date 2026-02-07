@@ -187,11 +187,7 @@ class CopilotChatModel(BaseChatModel):
             if system_messages:
                 # Concatenate all system messages
                 system_content = "\n".join(
-                    (
-                        str(msg.content)
-                        if isinstance(msg.content, str)
-                        else str(msg.content)
-                    )
+                    str(msg.content)
                     for msg in system_messages
                 )
                 config["systemMessage"] = {
@@ -209,6 +205,12 @@ class CopilotChatModel(BaseChatModel):
                 parts.append(f"Assistant: {msg.content}")
             elif isinstance(msg, ToolMessage):
                 parts.append(f"Tool: {msg.content}")
+            elif isinstance(msg, SystemMessage):
+                parts.append(f"System: {msg.content}")
+            else:
+                # Fallback for other BaseMessage types to avoid dropping content
+                role = getattr(msg, "type", msg.__class__.__name__)
+                parts.append(f"{role.capitalize()}: {msg.content}")
         return "\n\n".join(parts)
 
     def _generate(
@@ -409,7 +411,7 @@ class CopilotChatModel(BaseChatModel):
             # Register event listener
             session.on(on_event)
 
-            # Send the last non-system message
+            # Send the full serialized prompt (all messages)
             if full_prompt:
                 await session.send({"prompt": full_prompt})
 
