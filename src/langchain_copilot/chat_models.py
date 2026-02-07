@@ -186,10 +186,7 @@ class CopilotChatModel(BaseChatModel):
             ]
             if system_messages:
                 # Concatenate all system messages
-                system_content = "\n".join(
-                    str(msg.content)
-                    for msg in system_messages
-                )
+                system_content = "\n".join(str(msg.content) for msg in system_messages)
                 config["systemMessage"] = {
                     "content": system_content,
                 }
@@ -206,7 +203,9 @@ class CopilotChatModel(BaseChatModel):
             elif isinstance(msg, ToolMessage):
                 parts.append(f"Tool: {msg.content}")
             elif isinstance(msg, SystemMessage):
-                parts.append(f"System: {msg.content}")
+                # Skip SystemMessage - they are extracted separately in _create_session_config
+                # to avoid prompt injection risks
+                continue
             else:
                 # Fallback for other BaseMessage types to avoid dropping content
                 role = getattr(msg, "type", msg.__class__.__name__)
