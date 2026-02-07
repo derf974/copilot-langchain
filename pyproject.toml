@@ -16,7 +16,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "github-copilot-sdk==0.1.19",
+    "github-copilot-sdk>=0.1.23",
     "langchain-core>=1.2.7",
     "pydantic>=2.12.5",
 ]
@@ -34,6 +34,8 @@ dev = [
     "black>=26.1.0",
     "ruff>=0.14.13",
     "langchain-tests>=1.0.0",
+    "pytest-cov>=7.0.0",
+    "langchain>=1.2.7",
 ]
 
 [build-system]
@@ -45,3 +47,4 @@ packages = ["src/langchain_copilot"]
 
 [tool.hatch.version]
 path = "src/langchain_copilot/__init__.py"
+

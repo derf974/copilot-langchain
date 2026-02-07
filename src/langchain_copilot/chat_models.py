@@ -18,6 +18,7 @@ from langchain_core.messages import (
     BaseMessage,
     HumanMessage,
     SystemMessage,
+    ToolMessage,
 )
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from langchain_core.runnables import Runnable, RunnableBinding
@@ -26,6 +27,8 @@ from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import ConfigDict, Field, model_validator
 
 from copilot import CopilotClient, Tool
+from copilot.types import SessionConfig, SystemMessageReplaceConfig
+
 import logging
 
 # Suppress AssertionError logging from the Copilot SDK's event deserialization
@@ -153,7 +156,7 @@ class CopilotChatModel(BaseChatModel):
 
     def _create_session_config(
         self, messages: Optional[list[BaseMessage]] = None, **kwargs: Any
-    ) -> dict[str, Any]:
+    ) -> SessionConfig:
         """Create session configuration for Copilot SDK.
 
         Args:
@@ -163,20 +166,11 @@ class CopilotChatModel(BaseChatModel):
         Returns:
             Configuration dictionary for creating a Copilot session
         """
-        config = {
+        config_params = {
             "model": self.model_name,
             "streaming": self.streaming,
+            "tools": kwargs.get("tools", self.tools),
         }
-
-        if self.temperature is not None:
-            config["temperature"] = self.temperature
-        if self.max_tokens is not None:
-            config["max_tokens"] = self.max_tokens
-
-        # Tools can come from instance attribute or kwargs (from bind_tools)
-        tools = kwargs.get("tools", self.tools)
-        if tools is not None:
-            config["tools"] = tools
 
         # Extract system messages if provided
         if messages:
@@ -185,13 +179,39 @@ class CopilotChatModel(BaseChatModel):
             ]
             if system_messages:
                 # Concatenate all system messages
-                system_content = "\n".join(msg.content for msg in system_messages)
-                config["system_message"] = {
-                    "mode": "replace",
-                    "content": system_content,
-                }
+                system_content = "\n".join(str(msg.content) for msg in system_messages)
+                config_params["system_message"] = SystemMessageReplaceConfig(
+                    mode="replace",
+                    content=system_content,
+                )
 
-        return config
+        return SessionConfig(**config_params)
+
+    def _messages_to_prompt(self, messages: list[BaseMessage]) -> str:
+        parts = []
+        for msg in messages:
+            if isinstance(msg, HumanMessage):
+                parts.append(f"User: {msg.content}")
+            elif isinstance(msg, AIMessage):
+                parts.append(f"Assistant: {msg.content}")
+            elif isinstance(msg, ToolMessage):
+                parts.append(f"Tool: {msg.content}")
+            elif isinstance(msg, SystemMessage):
+                # Skip SystemMessage - they are extracted separately in _create_session_config
+                # to avoid prompt injection risks
+                continue
+            else:
+                # Fallback for other BaseMessage types to avoid dropping content
+                role = getattr(msg, "type", msg.__class__.__name__)
+                parts.append(f"{role.capitalize()}: {msg.content}")
+        if not parts:
+            raise ValueError(
+                "No valid messages to send. Messages must contain at least one "
+                "HumanMessage, AIMessage, or ToolMessage. SystemMessage instances "
+                "are automatically extracted and passed to the session configuration, "
+                "but at least one conversational message is required to start the interaction."
+            )
+        return "\n\n".join(parts)
 
     def _generate(
         self,
@@ -253,32 +273,7 @@ class CopilotChatModel(BaseChatModel):
         session = await client.create_session(session_config)
 
         try:
-            # Build the prompt with system messages prepended
-            # System messages are included in the prompt to ensure they are respected
-            system_messages = [
-                msg for msg in messages if isinstance(msg, SystemMessage)
-            ]
-            non_system_messages = [
-                msg for msg in messages if not isinstance(msg, SystemMessage)
-            ]
-
-            # Construct the full prompt
-            prompt_parts = []
-            if system_messages:
-                # Prepend system messages as context
-                for sys_msg in system_messages:
-                    prompt_parts.append(f"System: {sys_msg.content}")
-
-            # Add the user message
-            if non_system_messages:
-                # Note: Currently only the last non-system message is sent.
-                # This is appropriate for single-turn conversations (the common case).
-                # For multi-turn conversations, the session would need to be persisted
-                # across multiple generate calls, which is not currently supported
-                # by this implementation. This is a known limitation.
-                prompt_parts.append(non_system_messages[-1].content)
-
-            full_prompt = "\n\n".join(prompt_parts)
+            full_prompt = self._messages_to_prompt(messages)
 
             response_content = ""
             complete = asyncio.Event()
@@ -301,9 +296,8 @@ class CopilotChatModel(BaseChatModel):
             # Register event listener
             session.on(on_event)
 
-            # Send the full prompt (including system messages)
-            if full_prompt:
-                await session.send({"prompt": full_prompt})
+            # Send the full prompt
+            await session.send({"prompt": full_prompt})
 
             # Wait for session to be idle (all tools executed)
             await complete.wait()
@@ -382,16 +376,7 @@ class CopilotChatModel(BaseChatModel):
         session = await client.create_session(session_config)
 
         try:
-            # Filter out system messages - they're already in session config
-            non_system_messages = [
-                msg for msg in messages if not isinstance(msg, SystemMessage)
-            ]
-
-            # Note: Currently only the last non-system message is sent.
-            # This is appropriate for single-turn conversations (the common case).
-            # For multi-turn conversations, the session would need to be persisted
-            # across multiple generate calls, which is not currently supported
-            # by this implementation. This is a known limitation.
+            full_prompt = self._messages_to_prompt(messages)
 
             # Queue to collect chunks
             chunk_queue: asyncio.Queue = asyncio.Queue()
@@ -425,9 +410,8 @@ class CopilotChatModel(BaseChatModel):
             # Register event listener
             session.on(on_event)
 
-            # Send the last non-system message
-            if len(non_system_messages) > 0:
-                await session.send({"prompt": non_system_messages[-1].content})
+            # Send the prompt
+            await session.send({"prompt": full_prompt})
 
             # Yield chunks as they arrive
             while not complete.is_set() or not chunk_queue.empty():

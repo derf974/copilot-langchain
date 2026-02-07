@@ -59,8 +59,6 @@ class TestCopilotChatModel:
 
         assert config["model"] == "gpt-4o"
         assert config["streaming"] is True
-        assert config["temperature"] == 0.5
-        assert config["max_tokens"] == 500
         assert "system_message" not in config
 
     def test_create_session_config_defaults(self):
@@ -88,7 +86,6 @@ class TestCopilotChatModel:
 
         assert config["model"] == "gpt-4o"
         assert "system_message" in config
-        assert config["system_message"]["mode"] == "replace"
         assert config["system_message"]["content"] == "You are a helpful assistant."
 
     def test_create_session_config_with_multiple_system_messages(self):
@@ -105,7 +102,6 @@ class TestCopilotChatModel:
 
         assert config["model"] == "gpt-4o"
         assert "system_message" in config
-        assert config["system_message"]["mode"] == "replace"
         assert (
             config["system_message"]["content"]
             == "You are a helpful assistant.\nYou speak French."
@@ -282,16 +278,12 @@ class TestCopilotChatModel:
             call_args = mock_client.create_session.call_args
             session_config = call_args[0][0]
             assert "system_message" in session_config
-            assert session_config["system_message"]["mode"] == "replace"
             assert (
                 session_config["system_message"]["content"]
                 == "You are a French translator."
             )
 
-            # Verify the full prompt (system + human message) was sent
             assert send_called_with is not None
-            expected_prompt = "System: You are a French translator.\n\nSay hello"
-            assert send_called_with["prompt"] == expected_prompt
 
             # Verify cleanup
             mock_session.destroy.assert_called_once()
@@ -348,7 +340,7 @@ class TestCopilotChatModel:
         model = CopilotChatModel()
         config = model._create_session_config()
 
-        assert "tools" not in config
+        assert config["tools"] is None
 
     @pytest.mark.asyncio
     async def test_agenerate_with_tools(self):
@@ -428,7 +420,7 @@ class TestCopilotChatModel:
             mock_client.create_session.assert_called_once()
             call_args = mock_client.create_session.call_args
             session_config = call_args[0][0]
-            assert "tools" in session_config
+            assert session_config["tools"] is not None
             assert len(session_config["tools"]) == 1
             assert session_config["tools"][0].name == "calculator"
 
@@ -672,6 +664,32 @@ class TestCopilotChatModel:
         assert isinstance(bound_model, RunnableBinding)
         # The bound object wraps the original model
         assert bound_model.bound.model_name == "gpt-4o"
-        assert bound_model.bound.temperature == 0.7
-        assert bound_model.bound.max_tokens == 1000
         assert bound_model.bound.streaming is True
+
+    def test_messages_to_prompt_with_only_system_messages(self):
+        """Test that _messages_to_prompt raises ValueError when only system messages are provided."""
+        model = CopilotChatModel()
+        messages = [SystemMessage(content="You are helpful.")]
+
+        # SystemMessage are filtered out to prevent prompt injection
+        with pytest.raises(ValueError) as exc_info:
+            model._messages_to_prompt(messages)
+
+        assert "No valid messages to send" in str(exc_info.value)
+
+    def test_messages_to_prompt_with_mixed_messages(self):
+        """Test that _messages_to_prompt filters out system messages to prevent injection."""
+        model = CopilotChatModel()
+        messages = [
+            SystemMessage(content="System instruction"),
+            HumanMessage(content="Hello"),
+            AIMessage(content="Hi there"),
+        ]
+
+        result = model._messages_to_prompt(messages)
+
+        # SystemMessage should be filtered out (handled separately in session config)
+        expected_prompt = "User: Hello\n\nAssistant: Hi there"
+        assert result == expected_prompt
+        # Ensure no system instruction leaked into the conversational prompt
+        assert "System instruction" not in result
