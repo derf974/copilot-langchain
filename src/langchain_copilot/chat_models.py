@@ -410,7 +410,7 @@ class CopilotChatModel(BaseChatModel):
             session.on(on_event)
 
             # Send the last non-system message
-            if len(messages) > 0:
+            if full_prompt:
                 await session.send({"prompt": full_prompt})
 
             # Yield chunks as they arrive
