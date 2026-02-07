@@ -211,6 +211,13 @@ class CopilotChatModel(BaseChatModel):
                 # Fallback for other BaseMessage types to avoid dropping content
                 role = getattr(msg, "type", msg.__class__.__name__)
                 parts.append(f"{role.capitalize()}: {msg.content}")
+        if not parts:
+            raise ValueError(
+                "No valid messages to send. Messages must contain at least one "
+                "HumanMessage, AIMessage, or ToolMessage. SystemMessage instances "
+                "are automatically extracted and passed to the session configuration, "
+                "but at least one conversational message is required to start the interaction."
+            )
         return "\n\n".join(parts)
 
     def _generate(
@@ -296,9 +303,8 @@ class CopilotChatModel(BaseChatModel):
             # Register event listener
             session.on(on_event)
 
-            # Send the full prompt (including system messages)
-            if full_prompt:
-                await session.send({"prompt": full_prompt})
+            # Send the full prompt
+            await session.send({"prompt": full_prompt})
 
             # Wait for session to be idle (all tools executed)
             await complete.wait()
@@ -411,9 +417,8 @@ class CopilotChatModel(BaseChatModel):
             # Register event listener
             session.on(on_event)
 
-            # Send the full serialized prompt (all messages)
-            if full_prompt:
-                await session.send({"prompt": full_prompt})
+            # Send the prompt
+            await session.send({"prompt": full_prompt})
 
             # Yield chunks as they arrive
             while not complete.is_set() or not chunk_queue.empty():
