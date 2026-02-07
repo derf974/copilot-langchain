@@ -209,6 +209,15 @@ class CopilotChatModel(BaseChatModel):
                 parts.append(f"Assistant: {msg.content}")
             elif isinstance(msg, ToolMessage):
                 parts.append(f"Tool: {msg.content}")
+        
+        if not parts:
+            raise ValueError(
+                "No valid messages to send. Messages must contain at least one "
+                "HumanMessage, AIMessage, or ToolMessage. SystemMessage instances "
+                "should be passed via session configuration, not as part of the "
+                "conversation history."
+            )
+        
         return "\n\n".join(parts)
 
     def _generate(
@@ -294,9 +303,8 @@ class CopilotChatModel(BaseChatModel):
             # Register event listener
             session.on(on_event)
 
-            # Send the full prompt (including system messages)
-            if full_prompt:
-                await session.send({"prompt": full_prompt})
+            # Send the full prompt
+            await session.send({"prompt": full_prompt})
 
             # Wait for session to be idle (all tools executed)
             await complete.wait()
@@ -409,9 +417,8 @@ class CopilotChatModel(BaseChatModel):
             # Register event listener
             session.on(on_event)
 
-            # Send the last non-system message
-            if len(messages) > 0:
-                await session.send({"prompt": full_prompt})
+            # Send the prompt
+            await session.send({"prompt": full_prompt})
 
             # Yield chunks as they arrive
             while not complete.is_set() or not chunk_queue.empty():

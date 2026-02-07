@@ -669,3 +669,60 @@ class TestCopilotChatModel:
         assert bound_model.bound.temperature == 0.7
         assert bound_model.bound.max_tokens == 1000
         assert bound_model.bound.streaming is True
+
+    @pytest.mark.asyncio
+    async def test_agenerate_with_only_system_messages_raises_error(self):
+        """Test that _agenerate raises ValueError when only system messages are provided."""
+        CopilotChatModel._shared_client = None
+
+        with patch("langchain_copilot.chat_models.CopilotClient") as mock_client_class:
+            # Setup mocks
+            mock_client = AsyncMock()
+            mock_session = AsyncMock()
+
+            mock_client_class.return_value = mock_client
+            mock_client.create_session = AsyncMock(return_value=mock_session)
+
+            model = CopilotChatModel()
+            messages = [
+                SystemMessage(content="You are a helpful assistant."),
+                SystemMessage(content="You speak French."),
+            ]
+
+            # Should raise ValueError because no non-system messages are present
+            with pytest.raises(ValueError) as exc_info:
+                await model._agenerate(messages)
+
+            # Verify error message is clear
+            assert "No valid messages to send" in str(exc_info.value)
+            assert "HumanMessage, AIMessage, or ToolMessage" in str(exc_info.value)
+
+            # Verify session cleanup still happened
+            mock_session.destroy.assert_called_once()
+            mock_client.stop.assert_called_once()
+
+    def test_messages_to_prompt_with_only_system_messages(self):
+        """Test that _messages_to_prompt raises ValueError for only system messages."""
+        model = CopilotChatModel()
+        messages = [SystemMessage(content="You are helpful.")]
+
+        with pytest.raises(ValueError) as exc_info:
+            model._messages_to_prompt(messages)
+
+        assert "No valid messages to send" in str(exc_info.value)
+
+    def test_messages_to_prompt_with_mixed_messages(self):
+        """Test that _messages_to_prompt works correctly with mixed message types."""
+        model = CopilotChatModel()
+        messages = [
+            SystemMessage(content="System instruction (should be ignored)"),
+            HumanMessage(content="Hello"),
+            AIMessage(content="Hi there"),
+        ]
+
+        result = model._messages_to_prompt(messages)
+
+        # System message should not be in the prompt
+        assert "System instruction" not in result
+        assert "User: Hello" in result
+        assert "Assistant: Hi there" in result
