@@ -214,8 +214,8 @@ class CopilotChatModel(BaseChatModel):
             raise ValueError(
                 "No valid messages to send. Messages must contain at least one "
                 "HumanMessage, AIMessage, or ToolMessage. SystemMessage instances "
-                "should be passed via session configuration, not as part of the "
-                "conversation history."
+                "are automatically extracted and passed to the session configuration, "
+                "but at least one conversational message is required to start the interaction."
             )
         
         return "\n\n".join(parts)

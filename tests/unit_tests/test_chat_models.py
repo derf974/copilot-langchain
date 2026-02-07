@@ -722,7 +722,9 @@ class TestCopilotChatModel:
 
         result = model._messages_to_prompt(messages)
 
+        # Verify exact prompt format
+        expected_prompt = "User: Hello\n\nAssistant: Hi there"
+        assert result == expected_prompt
+        
         # System message should not be in the prompt
         assert "System instruction" not in result
-        assert "User: Hello" in result
-        assert "Assistant: Hi there" in result
