@@ -726,5 +726,12 @@ class TestCopilotChatModel:
         expected_prompt = "User: Hello\n\nAssistant: Hi there"
         assert result == expected_prompt
         
+        # Verify result is not empty
+        assert result
+        
         # System message should not be in the prompt
         assert "System instruction" not in result
+        
+        # Verify both human and AI messages are present
+        assert "User: Hello" in result
+        assert "Assistant: Hi there" in result
