@@ -27,7 +27,11 @@ from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import ConfigDict, Field, model_validator
 
 from copilot import CopilotClient, Tool
-from copilot.types import SessionConfig, SystemMessageReplaceConfig , CopilotClientOptions
+from copilot.types import (
+    SessionConfig,
+    SystemMessageReplaceConfig,
+    CopilotClientOptions,
+)
 
 import logging
 
@@ -302,7 +306,7 @@ class CopilotChatModel(BaseChatModel):
             # Wait for session to be idle (all tools executed)
             await complete.wait()
 
-            # Create response  
+            # Create response
             message = AIMessage(content=response_content)
             generation = ChatGeneration(message=message)
 
