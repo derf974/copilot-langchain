@@ -140,6 +140,54 @@ class TestCopilotChatModel:
         assert client == existing_client
 
     @pytest.mark.asyncio
+    async def test_get_client_with_cli_url(self):
+        """Test that _get_client passes cli_url as options dict to CopilotClient."""
+        CopilotChatModel._shared_client = None
+
+        with patch("langchain_copilot.chat_models.CopilotClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+
+            model = CopilotChatModel(cli_url="http://localhost:1234")
+            await model._get_client()
+
+            # CopilotClient should be called with a dict containing cli_url,
+            # not with cli_url as a keyword argument
+            mock_client_class.assert_called_once()
+            call_args = mock_client_class.call_args
+            assert call_args[0][0] == {"cli_url": "http://localhost:1234"}
+
+    @pytest.mark.asyncio
+    async def test_get_client_with_cli_path(self):
+        """Test that _get_client passes cli_path as options dict to CopilotClient."""
+        CopilotChatModel._shared_client = None
+
+        with patch("langchain_copilot.chat_models.CopilotClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+
+            model = CopilotChatModel(cli_path="/usr/local/bin/copilot")
+            await model._get_client()
+
+            mock_client_class.assert_called_once()
+            call_args = mock_client_class.call_args
+            assert call_args[0][0] == {"cli_path": "/usr/local/bin/copilot"}
+
+    @pytest.mark.asyncio
+    async def test_get_client_without_options(self):
+        """Test that _get_client passes None to CopilotClient when no options set."""
+        CopilotChatModel._shared_client = None
+
+        with patch("langchain_copilot.chat_models.CopilotClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+
+            model = CopilotChatModel()
+            await model._get_client()
+
+            mock_client_class.assert_called_once_with(None)
+
+    @pytest.mark.asyncio
     async def test_agenerate(self):
         """Test async generation."""
         CopilotChatModel._shared_client = None

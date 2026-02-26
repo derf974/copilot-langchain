@@ -108,7 +108,7 @@ class CopilotChatModel(BaseChatModel):
                     if self.cli_url:
                         options["cli_url"] = self.cli_url
 
-                    CopilotChatModel._shared_client = CopilotClient(**options)
+                    CopilotChatModel._shared_client = CopilotClient(options or None)
 
                     # Set up custom exception handler for asyncio loop to suppress
                     # AssertionErrors from Copilot SDK event deserialization
