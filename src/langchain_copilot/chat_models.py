@@ -27,7 +27,11 @@ from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import ConfigDict, Field, model_validator
 
 from copilot import CopilotClient, Tool
-from copilot.types import SessionConfig, SystemMessageReplaceConfig
+from copilot.types import (
+    SessionConfig,
+    SystemMessageReplaceConfig,
+    CopilotClientOptions,
+)
 
 import logging
 
@@ -102,13 +106,13 @@ class CopilotChatModel(BaseChatModel):
         if CopilotChatModel._shared_client is None:
             async with CopilotChatModel._client_lock:
                 if CopilotChatModel._shared_client is None:
-                    options = {}
+                    options = CopilotClientOptions()
                     if self.cli_path:
                         options["cli_path"] = self.cli_path
                     if self.cli_url:
                         options["cli_url"] = self.cli_url
 
-                    CopilotChatModel._shared_client = CopilotClient(**options)
+                    CopilotChatModel._shared_client = CopilotClient(options or None)
 
                     # Set up custom exception handler for asyncio loop to suppress
                     # AssertionErrors from Copilot SDK event deserialization
