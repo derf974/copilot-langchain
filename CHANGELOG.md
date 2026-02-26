@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-02-26
+### Added
+- Memory example demonstrating conversation history with `RunnableWithMessageHistory` (example 09)
+
+### Fixed
+- Fixed `cli_url` TypeError by passing options as dictionary to `CopilotClient`
+- Fixed indefinite hang when only system messages are provided
+- Improved message validation to raise clear errors for empty prompts
+
+### Changed
+- Refactored message handling and prompt construction logic
+- Improved error messages for invalid message configurations
+- Enhanced test coverage for edge cases
+
+### Removed
+- Removed temperature example (06_temperature.py) as it was redundant
+
+## [0.2.1] - 2026-01-29
+
+### Added
+- GitHub Actions workflow for automated PyPI releases
+- TestPyPI manual publishing workflow for pre-release testing
+- Comprehensive release documentation (RELEASE.md)
+
+### Fixed
+- Fixed author name in pyproject.toml metadata
+- Fixed project URLs configuration
+- Fixed dependency declarations in pyproject.toml
+
 ## [0.2.0] - 2026-01-28
 
 ### Added
@@ -40,6 +69,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Development tooling: pytest, black, ruff, uv integration
 - MIT License
 
-[unreleased]: https://github.com/derf974/copilot-langchain/compare/v0.2.0...HEAD
+[unreleased]: https://github.com/derf974/copilot-langchain/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/derf974/copilot-langchain/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/derf974/copilot-langchain/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/derf974/copilot-langchain/releases/tag/v0.1.0
