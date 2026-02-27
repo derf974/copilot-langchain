@@ -27,7 +27,19 @@ Before using this package, you need to have:
 
 ## Installation
 
-This package is not yet published to PyPI. For now, install directly from the repository:
+### From PyPI (Recommended)
+
+```bash
+# Install with uv (recommended)
+uv pip install langchain-copilot
+
+# Or with pip
+pip install langchain-copilot
+```
+
+### From Source
+
+For development or to use the latest unreleased features:
 
 ```bash
 # Clone the repository

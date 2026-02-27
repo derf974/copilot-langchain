@@ -3,11 +3,14 @@
 ## Installation
 
 ```bash
-# Using uv
-uv sync
+# From PyPI (recommended)
+uv pip install langchain-copilot
+# Or: pip install langchain-copilot
 
-# Or using pip
-pip install -e .
+# For development (from source)
+git clone https://github.com/derf974/copilot-langchain.git
+cd copilot-langchain
+uv sync
 ```
 
 ## Running Examples
