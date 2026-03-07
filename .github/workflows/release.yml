@@ -6,39 +6,6 @@ on:
       - 'v*'
 
 jobs:
-  github-release:
-    name: Create GitHub Release
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write  # Required for creating releases
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Extract version from tag
-        id: version
-        run: |
-          VERSION=${GITHUB_REF#refs/tags/v}
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Releasing version: $VERSION"
-
-      - name: Extract changelog section
-        id: changelog
-        uses: mindsers/changelog-reader-action@v2
-        with:
-          version: ${{ steps.version.outputs.version }}
-          path: ./CHANGELOG.md
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          body: ${{ steps.changelog.outputs.changes }}
-          draft: false
-          prerelease: false
-          generate_release_notes: true  # Adds auto-generated notes from PRs/commits
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
   build:
     name: Build distribution
     runs-on: ubuntu-latest
@@ -78,7 +45,7 @@ jobs:
 
   pypi-publish:
     name: Publish to PyPI
-    needs: [github-release, build]
+    needs: [build]
     runs-on: ubuntu-latest
     environment:
       name: pypi

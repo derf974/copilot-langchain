@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-03-08
+
+### Changed
+- Updated `github-copilot-sdk` minimum version from `0.1.23` to `0.1.32`
+- Updated `langchain-core` minimum version from `1.2.7` to `1.2.17`
+
 ## [0.2.2] - 2026-02-26
 ### Added
 - Memory example demonstrating conversation history with `RunnableWithMessageHistory` (example 09)
@@ -69,7 +75,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Development tooling: pytest, black, ruff, uv integration
 - MIT License
 
-[unreleased]: https://github.com/derf974/copilot-langchain/compare/v0.2.1...HEAD
+[unreleased]: https://github.com/derf974/copilot-langchain/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/derf974/copilot-langchain/compare/v0.2.2...v0.2.3
+[0.2.2]: https://github.com/derf974/copilot-langchain/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/derf974/copilot-langchain/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/derf974/copilot-langchain/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/derf974/copilot-langchain/releases/tag/v0.1.0
