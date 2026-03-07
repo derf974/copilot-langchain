@@ -26,7 +26,7 @@ from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import ConfigDict, Field, model_validator
 
-from copilot import CopilotClient, Tool
+from copilot import CopilotClient, PermissionHandler, Tool
 from copilot.types import (
     SessionConfig,
     SystemMessageReplaceConfig,
@@ -174,6 +174,7 @@ class CopilotChatModel(BaseChatModel):
             "model": self.model_name,
             "streaming": self.streaming,
             "tools": kwargs.get("tools", self.tools),
+            "on_permission_request": PermissionHandler.approve_all,
         }
 
         # Extract system messages if provided
