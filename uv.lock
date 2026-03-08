@@ -340,7 +340,7 @@ wheels = [
 
 [[package]]
 name = "langchain-copilot"
-version = "0.2.2"
+version = "0.2.3"
 source = { editable = "." }
 dependencies = [
     { name = "github-copilot-sdk" },
