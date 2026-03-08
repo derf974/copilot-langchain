@@ -197,43 +197,16 @@ class TestCopilotChatModel:
             mock_client = AsyncMock()
             mock_session = AsyncMock()
 
-            # Store the callback to trigger it later
-            stored_callback = None
+            # Create a mock event object to return from send_and_wait
+            class MockEvent:
+                class Data:
+                    content = "Hello from Copilot!"
 
-            def mock_on(callback):
-                nonlocal stored_callback
-                stored_callback = callback
+                data = Data()
 
-            # Configure session.send to trigger the event
-            async def mock_send(message):
-                # Simulate receiving a message after send
-                if stored_callback:
-                    # Create a mock event object for assistant message
-                    class MockMessageEvent:
-                        class Type:
-                            value = "assistant.message"
-
-                        type = Type()
-
-                        class Data:
-                            content = "Hello from Copilot!"
-
-                        data = Data()
-
-                    # Create a mock event for session idle
-                    class MockIdleEvent:
-                        class Type:
-                            value = "session.idle"
-
-                        type = Type()
-
-                    await asyncio.sleep(0.01)  # Small delay to simulate async
-                    stored_callback(MockMessageEvent())
-                    await asyncio.sleep(0.01)
-                    stored_callback(MockIdleEvent())
-
-            mock_session.on = mock_on
-            mock_session.send = mock_send
+            # Configure session.send_and_wait to return the mock event
+            mock_session.send_and_wait = AsyncMock(return_value=MockEvent())
+            
             mock_client_class.return_value = mock_client
             mock_client.create_session = AsyncMock(return_value=mock_session)
 
@@ -248,6 +221,7 @@ class TestCopilotChatModel:
 
             # Verify session was created and destroyed
             mock_client.create_session.assert_called_once()
+            mock_session.send_and_wait.assert_called_once()
             mock_session.destroy.assert_called_once()
             mock_client.stop.assert_called_once()
 
@@ -266,46 +240,16 @@ class TestCopilotChatModel:
             mock_client = AsyncMock()
             mock_session = AsyncMock()
 
-            # Store the callback to trigger it later
-            stored_callback = None
-            send_called_with = None
+            # Create a mock event object to return from send_and_wait
+            class MockEvent:
+                class Data:
+                    content = "Bonjour!"
 
-            def mock_on(callback):
-                nonlocal stored_callback
-                stored_callback = callback
+                data = Data()
 
-            # Configure session.send to trigger the event
-            async def mock_send(message):
-                nonlocal send_called_with
-                send_called_with = message
-                # Simulate receiving a message after send
-                if stored_callback:
-                    # Create a mock event object for assistant message
-                    class MockMessageEvent:
-                        class Type:
-                            value = "assistant.message"
-
-                        type = Type()
-
-                        class Data:
-                            content = "Bonjour!"
-
-                        data = Data()
-
-                    # Create a mock event for session idle
-                    class MockIdleEvent:
-                        class Type:
-                            value = "session.idle"
-
-                        type = Type()
-
-                    await asyncio.sleep(0.01)  # Small delay to simulate async
-                    stored_callback(MockMessageEvent())
-                    await asyncio.sleep(0.01)
-                    stored_callback(MockIdleEvent())
-
-            mock_session.on = mock_on
-            mock_session.send = mock_send
+            # Configure session.send_and_wait to return the mock event
+            mock_session.send_and_wait = AsyncMock(return_value=MockEvent())
+            
             mock_client_class.return_value = mock_client
             mock_client.create_session = AsyncMock(return_value=mock_session)
 
@@ -331,9 +275,8 @@ class TestCopilotChatModel:
                 == "You are a French translator."
             )
 
-            assert send_called_with is not None
-
             # Verify cleanup
+            mock_session.send_and_wait.assert_called_once()
             mock_session.destroy.assert_called_once()
             mock_client.stop.assert_called_once()
 
@@ -415,43 +358,16 @@ class TestCopilotChatModel:
             mock_client = AsyncMock()
             mock_session = AsyncMock()
 
-            # Store the callback to trigger it later
-            stored_callback = None
+            # Create a mock event object to return from send_and_wait
+            class MockEvent:
+                class Data:
+                    content = "The result is 42"
 
-            def mock_on(callback):
-                nonlocal stored_callback
-                stored_callback = callback
+                data = Data()
 
-            # Configure session.send to trigger the event
-            async def mock_send(message):
-                # Simulate receiving a message after send
-                if stored_callback:
-                    # Create a mock event object for assistant message
-                    class MockMessageEvent:
-                        class Type:
-                            value = "assistant.message"
-
-                        type = Type()
-
-                        class Data:
-                            content = "The result is 42"
-
-                        data = Data()
-
-                    # Create a mock event for session idle
-                    class MockIdleEvent:
-                        class Type:
-                            value = "session.idle"
-
-                        type = Type()
-
-                    await asyncio.sleep(0.01)  # Small delay to simulate async
-                    stored_callback(MockMessageEvent())
-                    await asyncio.sleep(0.01)
-                    stored_callback(MockIdleEvent())
-
-            mock_session.on = mock_on
-            mock_session.send = mock_send
+            # Configure session.send_and_wait to return the mock event
+            mock_session.send_and_wait = AsyncMock(return_value=MockEvent())
+            
             mock_client_class.return_value = mock_client
             mock_client.create_session = AsyncMock(return_value=mock_session)
 
@@ -473,6 +389,7 @@ class TestCopilotChatModel:
             assert session_config["tools"][0].name == "calculator"
 
             # Verify cleanup
+            mock_session.send_and_wait.assert_called_once()
             mock_session.destroy.assert_called_once()
             mock_client.stop.assert_called_once()
 
