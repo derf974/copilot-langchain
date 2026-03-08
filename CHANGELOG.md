@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.4](https://github.com/derf974/copilot-langchain/compare/v0.2.3...v0.2.4) (2026-03-08)
+
+
+### Bug Fixes
+
+* add on permission request to  create session config ([#17](https://github.com/derf974/copilot-langchain/issues/17)) ([505d30d](https://github.com/derf974/copilot-langchain/commit/505d30dca3a9399459c156dbe4fd69fa5ac36dba))
+
 ## [0.2.3](https://github.com/derf974/copilot-langchain/compare/v0.2.2...v0.2.3) (2026-03-07)
 
 
