@@ -509,6 +509,7 @@ class CopilotChatModel(BaseChatModel):
                             description=tool_schema["function"]["description"],
                             parameters=tool_schema["function"]["parameters"],
                             handler=create_callable_handler(tool),
+                            overrides_built_in_tool=True,
                         )
                         copilot_tools.append(copilot_tool)
                     except Exception as e:
@@ -549,6 +550,7 @@ class CopilotChatModel(BaseChatModel):
                     description=tool_schema["function"]["description"],
                     parameters=tool_schema["function"]["parameters"],
                     handler=create_handler(tool),
+                    overrides_built_in_tool=True,
                 )
                 copilot_tools.append(copilot_tool)
             elif isinstance(tool, dict):
