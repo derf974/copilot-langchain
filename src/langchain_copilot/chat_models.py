@@ -26,7 +26,7 @@ from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import ConfigDict, Field, model_validator
 
-from copilot import CopilotClient, Tool
+from copilot import CopilotClient, PermissionHandler, Tool
 from copilot.types import (
     SessionConfig,
     SystemMessageReplaceConfig,
@@ -174,6 +174,7 @@ class CopilotChatModel(BaseChatModel):
             "model": self.model_name,
             "streaming": self.streaming,
             "tools": kwargs.get("tools", self.tools),
+            "on_permission_request": PermissionHandler.approve_all,
         }
 
         # Extract system messages if provided
@@ -279,32 +280,11 @@ class CopilotChatModel(BaseChatModel):
         try:
             full_prompt = self._messages_to_prompt(messages)
 
+            last_event = await session.send_and_wait({"prompt": full_prompt})
+
             response_content = ""
-            complete = asyncio.Event()
-
-            def on_event(event):
-                nonlocal response_content
-                try:
-                    if event.type.value == "assistant.message":
-                        # Store the message content
-                        response_content = event.data.content
-                    elif event.type.value == "assistant.message_delta":
-                        response_content += event.data.content
-                    elif event.type.value == "session.idle":
-                        # Session is idle - all tool calls completed
-                        complete.set()
-                except (AttributeError, KeyError):
-                    # Ignore malformed events
-                    pass
-
-            # Register event listener
-            session.on(on_event)
-
-            # Send the full prompt
-            await session.send({"prompt": full_prompt})
-
-            # Wait for session to be idle (all tools executed)
-            await complete.wait()
+            if last_event is not None and last_event.data is not None:
+                response_content = last_event.data.content or ""
 
             # Create response
             message = AIMessage(content=response_content)
@@ -529,6 +509,7 @@ class CopilotChatModel(BaseChatModel):
                             description=tool_schema["function"]["description"],
                             parameters=tool_schema["function"]["parameters"],
                             handler=create_callable_handler(tool),
+                            overrides_built_in_tool=True,
                         )
                         copilot_tools.append(copilot_tool)
                     except Exception as e:
@@ -569,6 +550,7 @@ class CopilotChatModel(BaseChatModel):
                     description=tool_schema["function"]["description"],
                     parameters=tool_schema["function"]["parameters"],
                     handler=create_handler(tool),
+                    overrides_built_in_tool=True,
                 )
                 copilot_tools.append(copilot_tool)
             elif isinstance(tool, dict):
