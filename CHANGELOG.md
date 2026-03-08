@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.5](https://github.com/derf974/copilot-langchain/compare/v0.2.4...v0.2.5) (2026-03-08)
+
+
+### Bug Fixes
+
+* trigger PyPI publish on release event instead of tag push ([#21](https://github.com/derf974/copilot-langchain/issues/21)) ([a9f4ebb](https://github.com/derf974/copilot-langchain/commit/a9f4ebb8950faedd204518a6b907ce62bdd9cc28))
+
 ## [0.2.4](https://github.com/derf974/copilot-langchain/compare/v0.2.3...v0.2.4) (2026-03-08)
 
 
