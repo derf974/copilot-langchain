@@ -7,13 +7,33 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  id-token: write
 
 jobs:
   release-please:
     runs-on: ubuntu-latest
-    steps:
+    steps:    
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+      - name: Install Python 3.13
+        run: uv python install 3.13
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+      - name: Run tests
+        run: |
+          make test
       - uses: googleapis/release-please-action@v4
+        id: release
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           config-file: .github/release-please-config.json
           manifest-file: .github/.release-please-manifest.json
+
+      - name: Build package
+        if: ${{ steps.release.outputs.release_created }}
+        run: uv build
+        
+      - name: Publish to PyPI
+        if: ${{ steps.release.outputs.release_created }}
+        uses: pypa/gh-action-pypi-publish@release/v1
