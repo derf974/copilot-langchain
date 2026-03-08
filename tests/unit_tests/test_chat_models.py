@@ -206,7 +206,7 @@ class TestCopilotChatModel:
 
             # Configure session.send_and_wait to return the mock event
             mock_session.send_and_wait = AsyncMock(return_value=MockEvent())
-            
+
             mock_client_class.return_value = mock_client
             mock_client.create_session = AsyncMock(return_value=mock_session)
 
@@ -249,7 +249,7 @@ class TestCopilotChatModel:
 
             # Configure session.send_and_wait to return the mock event
             mock_session.send_and_wait = AsyncMock(return_value=MockEvent())
-            
+
             mock_client_class.return_value = mock_client
             mock_client.create_session = AsyncMock(return_value=mock_session)
 
@@ -367,7 +367,7 @@ class TestCopilotChatModel:
 
             # Configure session.send_and_wait to return the mock event
             mock_session.send_and_wait = AsyncMock(return_value=MockEvent())
-            
+
             mock_client_class.return_value = mock_client
             mock_client.create_session = AsyncMock(return_value=mock_session)
 
