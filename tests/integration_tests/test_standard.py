@@ -118,4 +118,4 @@ class TestCopilotChatModelIntegration(ChatModelIntegrationTests):
     @property
     def model_override_value(self) -> str:
         """Alternative model to test model override functionality."""
-        return "gpt-4o-mini"
+        return "gpt-5-mini"

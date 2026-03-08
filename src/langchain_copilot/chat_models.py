@@ -77,6 +77,7 @@ class CopilotChatModel(BaseChatModel):
     # Internal shared client (class variable)
     _shared_client: ClassVar[Optional[CopilotClient]] = None
     _client_lock: ClassVar[Optional[asyncio.Lock]] = None
+    _shared_loop: ClassVar[Optional[asyncio.AbstractEventLoop]] = None
 
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
@@ -98,9 +99,27 @@ class CopilotChatModel(BaseChatModel):
     async def _get_client(self) -> CopilotClient:
         """Get or create the shared Copilot client (lazy initialization).
 
+        The client is tied to the event loop it was started on.  When pytest-asyncio
+        (or asyncio.run) creates a fresh loop for each test, we detect the loop change
+        and transparently recreate the client so the underlying I/O transports are
+        always valid.
+
         Returns:
             The shared CopilotClient instance
         """
+        current_loop = asyncio.get_running_loop()
+
+        # If the client was initialised on a different (now closed) event loop,
+        # discard it so we start fresh on the current loop.
+        if (
+            CopilotChatModel._shared_client is not None
+            and CopilotChatModel._shared_loop is not current_loop
+        ):
+            CopilotChatModel._shared_client = None
+            CopilotChatModel._shared_loop = None
+            # Recreate the lock bound to the current loop
+            CopilotChatModel._client_lock = asyncio.Lock()
+
         if CopilotChatModel._shared_client is None:
             async with CopilotChatModel._client_lock:
                 if CopilotChatModel._shared_client is None:
@@ -112,22 +131,17 @@ class CopilotChatModel(BaseChatModel):
 
                     CopilotChatModel._shared_client = CopilotClient(options or None)
 
-                    # Set up custom exception handler for asyncio loop to suppress
-                    # AssertionErrors from Copilot SDK event deserialization
-                    loop = asyncio.get_event_loop()
-
+                    # Suppress AssertionErrors from Copilot SDK event deserialization
                     def custom_exception_handler(loop, context):
                         exception = context.get("exception")
-                        # Suppress AssertionError from Copilot SDK's session_events.py
                         if isinstance(exception, AssertionError):
-                            # Ignore this specific error from the SDK
                             return
-                        # For other exceptions, use default handling
                         loop.default_exception_handler(context)
 
-                    loop.set_exception_handler(custom_exception_handler)
+                    current_loop.set_exception_handler(custom_exception_handler)
 
                     await CopilotChatModel._shared_client.start()
+                    CopilotChatModel._shared_loop = current_loop
 
         return CopilotChatModel._shared_client
 
@@ -169,7 +183,9 @@ class CopilotChatModel(BaseChatModel):
             Configuration dictionary for creating a Copilot session
         """
         config_params = {
-            "model": self.model_name,
+            # Allow callers to override the model at runtime via a "model" kwarg
+            # (e.g. model.invoke("Hello", model="gpt-5-mini")).
+            "model": kwargs.get("model", self.model_name),
             "streaming": self.streaming,
             "tools": kwargs.get("tools", self.tools),
             "on_permission_request": PermissionHandler.approve_all,
@@ -235,9 +251,14 @@ class CopilotChatModel(BaseChatModel):
             ChatResult containing the generated response
         """
         # Run async version in sync context
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            # If we're already in an async context, create a new event loop
+        try:
+            loop = asyncio.get_running_loop()
+            is_running = True
+        except RuntimeError:
+            is_running = False
+
+        if is_running:
+            # If we're already in an async context, run in a thread with its own loop
             import concurrent.futures
 
             with concurrent.futures.ThreadPoolExecutor() as executor:
@@ -246,7 +267,7 @@ class CopilotChatModel(BaseChatModel):
                 )
                 return future.result()
         else:
-            return loop.run_until_complete(
+            return asyncio.run(
                 self._agenerate(messages, stop, run_manager, **kwargs)
             )
 
@@ -270,6 +291,7 @@ class CopilotChatModel(BaseChatModel):
         """
         client = await self._get_client()
         # Pass messages and kwargs to extract system messages and tools for session config
+        effective_model = kwargs.get("model", self.model_name)
         session_config = self._create_session_config(messages, **kwargs)
 
         # Create a session
@@ -284,16 +306,19 @@ class CopilotChatModel(BaseChatModel):
             if last_event is not None and last_event.data is not None:
                 response_content = last_event.data.content or ""
 
-            # Create response
-            message = AIMessage(content=response_content)
+            # Create response, including any captured tool calls
+            message = AIMessage(
+                content=response_content,
+                tool_calls=captured_tool_calls,
+                response_metadata={"model_name": effective_model},
+            )
             generation = ChatGeneration(message=message)
 
             return ChatResult(generations=[generation])
 
         finally:
-            # Clean up session
-            await session.destroy()
-            await client.stop()
+            # Disconnect session only; the shared client stays alive for reuse
+            await session.disconnect()
 
     def _stream(
         self,
@@ -314,22 +339,26 @@ class CopilotChatModel(BaseChatModel):
             ChatGenerationChunk for each chunk of the response
         """
         # Run async version in sync context
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
+        try:
+            asyncio.get_running_loop()
             raise RuntimeError(
                 "Cannot use sync streaming from an async context. "
                 "Use astream() instead."
             )
+        except RuntimeError as exc:
+            if "async context" in str(exc):
+                raise
 
-        async_gen = self._astream(messages, stop, run_manager, **kwargs)
+        # Drain the async generator using asyncio.run() per chunk so each
+        # iteration gets a fresh event loop, avoiding the stale-loop issue.
+        async def _collect_all() -> list:
+            chunks = []
+            async for chunk in self._astream(messages, stop, run_manager, **kwargs):
+                chunks.append(chunk)
+            return chunks
 
-        # Convert async generator to sync
-        while True:
-            try:
-                chunk = loop.run_until_complete(async_gen.__anext__())
-                yield chunk
-            except StopAsyncIteration:
-                break
+        for chunk in asyncio.run(_collect_all()):
+            yield chunk
 
     async def _astream(
         self,
@@ -351,6 +380,7 @@ class CopilotChatModel(BaseChatModel):
         """
         client = await self._get_client()
         # Pass messages and kwargs to extract system messages and tools for session config
+        effective_model = kwargs.get("model", self.model_name)
         session_config = self._create_session_config(messages, **kwargs)
         session_config["streaming"] = True  # Force streaming mode
 
@@ -418,10 +448,18 @@ class CopilotChatModel(BaseChatModel):
                 except asyncio.TimeoutError:
                     continue
 
+            # Yield a final empty chunk with response_metadata so the merged
+            # result has model_name available (e.g. test_stream_with_model_override)
+            yield ChatGenerationChunk(
+                message=AIMessageChunk(
+                    content="",
+                    response_metadata={"model_name": effective_model},
+                )
+            )
+
         finally:
-            # Clean up session
-            await session.destroy()
-            await client.stop()
+            # Disconnect session only; the shared client stays alive for reuse
+            await session.disconnect()
 
     def bind_tools(
         self,
@@ -470,6 +508,45 @@ class CopilotChatModel(BaseChatModel):
             if isinstance(tool, Tool):
                 # Already a Copilot SDK Tool
                 copilot_tools.append(tool)
+            elif isinstance(tool, BaseTool):
+                # LangChain BaseTool - convert to Copilot format
+                # Must be checked before callable() since BaseTool is also callable
+                tool_schema = convert_to_openai_tool(tool)
+
+                # Create an async handler that wraps the BaseTool
+                # We need to capture the tool instance in the closure
+                def create_handler(base_tool: BaseTool):
+                    async def handler(invocation):
+                        args = invocation.arguments or {}
+                        try:
+                            # Try async invoke first
+                            if hasattr(base_tool, "ainvoke"):
+                                result = await base_tool.ainvoke(args)
+                            else:
+                                # Fall back to sync invoke
+                                result = base_tool.invoke(args)
+
+                            return ToolResult(
+                                text_result_for_llm=str(result),
+                                result_type="success",
+                            )
+                        except Exception as e:
+                            return ToolResult(
+                                text_result_for_llm=f"Error: {str(e)}",
+                                result_type="failure",
+                                error=str(e),
+                            )
+
+                    return handler
+
+                copilot_tool = Tool(
+                    name=tool_schema["function"]["name"],
+                    description=tool_schema["function"]["description"],
+                    parameters=tool_schema["function"]["parameters"],
+                    handler=create_handler(tool),
+                    overrides_built_in_tool=True,
+                )
+                copilot_tools.append(copilot_tool)
             elif callable(tool):
                 # Check if it's already a defined tool (has _tool_info attribute)
                 if hasattr(tool, "_tool_info"):
@@ -482,7 +559,7 @@ class CopilotChatModel(BaseChatModel):
                         # Create handler for the callable
                         def create_callable_handler(func: Callable):
                             async def handler(invocation):
-                                args = invocation.get("arguments", {})
+                                args = invocation.arguments or {}
                                 try:
                                     # Check if it's async
                                     if asyncio.iscoroutinefunction(func):
@@ -490,15 +567,16 @@ class CopilotChatModel(BaseChatModel):
                                     else:
                                         result = func(**args)
 
-                                    return {
-                                        "textResultForLlm": str(result),
-                                        "resultType": "success",
-                                    }
+                                    return ToolResult(
+                                        text_result_for_llm=str(result),
+                                        result_type="success",
+                                    )
                                 except Exception as e:
-                                    return {
-                                        "textResultForLlm": f"Error: {str(e)}",
-                                        "resultType": "error",
-                                    }
+                                    return ToolResult(
+                                        text_result_for_llm=f"Error: {str(e)}",
+                                        result_type="failure",
+                                        error=str(e),
+                                    )
 
                             return handler
 
@@ -514,43 +592,6 @@ class CopilotChatModel(BaseChatModel):
                         raise ValueError(
                             f"Failed to convert callable {tool} to Copilot tool: {e}"
                         )
-            elif isinstance(tool, BaseTool):
-                # LangChain BaseTool - convert to Copilot format
-                tool_schema = convert_to_openai_tool(tool)
-
-                # Create an async handler that wraps the BaseTool
-                # We need to capture the tool instance in the closure
-                def create_handler(base_tool: BaseTool):
-                    async def handler(invocation):
-                        args = invocation.get("arguments", {})
-                        try:
-                            # Try async invoke first
-                            if hasattr(base_tool, "ainvoke"):
-                                result = await base_tool.ainvoke(args)
-                            else:
-                                # Fall back to sync invoke
-                                result = base_tool.invoke(args)
-
-                            return {
-                                "textResultForLlm": str(result),
-                                "resultType": "success",
-                            }
-                        except Exception as e:
-                            return {
-                                "textResultForLlm": f"Error: {str(e)}",
-                                "resultType": "error",
-                            }
-
-                    return handler
-
-                copilot_tool = Tool(
-                    name=tool_schema["function"]["name"],
-                    description=tool_schema["function"]["description"],
-                    parameters=tool_schema["function"]["parameters"],
-                    handler=create_handler(tool),
-                    overrides_built_in_tool=True,
-                )
-                copilot_tools.append(copilot_tool)
             elif isinstance(tool, dict):
                 # Dict-style tool schema - could be OpenAI format or JSON schema
                 if "function" in tool:
