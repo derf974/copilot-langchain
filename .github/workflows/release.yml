@@ -3,6 +3,18 @@ name: Release to PyPI
 on:
   release:
     types: [published]
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Optional tag to release (e.g. v1.2.3). If set, used instead of GITHUB_REF.'
+        required: false
+      publish:
+        description: 'Whether to publish to PyPI (true/false)'
+        required: false
+        default: 'true'
 
 jobs:
   build:
@@ -19,10 +31,23 @@ jobs:
         run: uv python install 3.13
 
       - name: Verify version matches tag
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
         run: |
-          TAG_VERSION=${GITHUB_REF#refs/tags/v}
+          if [ -n "$INPUT_TAG" ]; then
+            TAG_VERSION=${INPUT_TAG#v}
+          else
+            TAG_VERSION=${GITHUB_REF#refs/tags/v}
+          fi
+
           PYPROJECT_VERSION=$(grep '^version = ' pyproject.toml | cut -d'"' -f2)
-          
+
+          if [ -z "$TAG_VERSION" ]; then
+            echo "⚠️ No tag detected. If running manually, provide the 'tag' input."
+            echo "GITHUB_REF=$GITHUB_REF"
+            exit 1
+          fi
+
           if [ "$TAG_VERSION" != "$PYPROJECT_VERSION" ]; then
             echo "❌ Version mismatch detected!"
             echo "   Tag version: $TAG_VERSION"
@@ -30,7 +55,7 @@ jobs:
             echo "Please update pyproject.toml version before creating the tag."
             exit 1
           fi
-          
+
           echo "✅ Version match confirmed: $TAG_VERSION"
 
       - name: Build package
