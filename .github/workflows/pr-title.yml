@@ -19,4 +19,4 @@ jobs:
             echo "Expected format: type(scope)?: description"
             exit 1
           fi
-        shell: bash -l
+        shell: bash
