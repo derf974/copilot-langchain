@@ -7,6 +7,7 @@ from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from langchain_core.tools import tool
 from langchain_copilot import CopilotChatModel
 from copilot import Tool, define_tool
+from copilot.types import ExternalServerConfig, SubprocessConfig
 from pydantic import BaseModel, Field
 
 
@@ -141,7 +142,7 @@ class TestCopilotChatModel:
 
     @pytest.mark.asyncio
     async def test_get_client_with_cli_url(self):
-        """Test that _get_client passes cli_url as options dict to CopilotClient."""
+        """Test that _get_client passes ExternalServerConfig to CopilotClient."""
         CopilotChatModel._shared_client = None
 
         with patch("langchain_copilot.chat_models.CopilotClient") as mock_client_class:
@@ -151,15 +152,15 @@ class TestCopilotChatModel:
             model = CopilotChatModel(cli_url="http://localhost:1234")
             await model._get_client()
 
-            # CopilotClient should be called with a dict containing cli_url,
-            # not with cli_url as a keyword argument
             mock_client_class.assert_called_once()
             call_args = mock_client_class.call_args
-            assert call_args[0][0] == {"cli_url": "http://localhost:1234"}
+            config = call_args[0][0]
+            assert isinstance(config, ExternalServerConfig)
+            assert config.url == "http://localhost:1234"
 
     @pytest.mark.asyncio
     async def test_get_client_with_cli_path(self):
-        """Test that _get_client passes cli_path as options dict to CopilotClient."""
+        """Test that _get_client passes SubprocessConfig to CopilotClient."""
         CopilotChatModel._shared_client = None
 
         with patch("langchain_copilot.chat_models.CopilotClient") as mock_client_class:
@@ -171,7 +172,9 @@ class TestCopilotChatModel:
 
             mock_client_class.assert_called_once()
             call_args = mock_client_class.call_args
-            assert call_args[0][0] == {"cli_path": "/usr/local/bin/copilot"}
+            config = call_args[0][0]
+            assert isinstance(config, SubprocessConfig)
+            assert config.cli_path == "/usr/local/bin/copilot"
 
     @pytest.mark.asyncio
     async def test_get_client_without_options(self):
@@ -268,7 +271,7 @@ class TestCopilotChatModel:
             # Verify session was created with system message
             mock_client.create_session.assert_called_once()
             call_args = mock_client.create_session.call_args
-            session_config = call_args[0][0]
+            session_config = call_args.kwargs
             assert "system_message" in session_config
             assert (
                 session_config["system_message"]["content"]
@@ -383,7 +386,7 @@ class TestCopilotChatModel:
             # Verify session was created with tools
             mock_client.create_session.assert_called_once()
             call_args = mock_client.create_session.call_args
-            session_config = call_args[0][0]
+            session_config = call_args.kwargs
             assert session_config["tools"] is not None
             assert len(session_config["tools"]) == 1
             assert session_config["tools"][0].name == "calculator"
@@ -494,7 +497,7 @@ class TestCopilotChatModel:
             # Verify session was created with tools and streaming enabled
             mock_client.create_session.assert_called_once()
             call_args = mock_client.create_session.call_args
-            session_config = call_args[0][0]
+            session_config = call_args.kwargs
             assert session_config["streaming"] is True
             assert "tools" in session_config
             assert len(session_config["tools"]) == 1
