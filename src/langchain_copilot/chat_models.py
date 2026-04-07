@@ -28,9 +28,9 @@ from pydantic import ConfigDict, Field, model_validator
 
 from copilot import CopilotClient, PermissionHandler, Tool
 from copilot.types import (
-    SessionConfig,
+    ExternalServerConfig,
+    SubprocessConfig,
     SystemMessageReplaceConfig,
-    CopilotClientOptions,
 )
 
 import logging
@@ -106,11 +106,11 @@ class CopilotChatModel(BaseChatModel):
         if CopilotChatModel._shared_client is None:
             async with CopilotChatModel._client_lock:
                 if CopilotChatModel._shared_client is None:
-                    options = CopilotClientOptions()
-                    if self.cli_path:
-                        options["cli_path"] = self.cli_path
+                    options = None
                     if self.cli_url:
-                        options["cli_url"] = self.cli_url
+                        options = ExternalServerConfig(url=self.cli_url)
+                    elif self.cli_path:
+                        options = SubprocessConfig(cli_path=self.cli_path)
 
                     CopilotChatModel._shared_client = CopilotClient(options or None)
 
@@ -160,7 +160,7 @@ class CopilotChatModel(BaseChatModel):
 
     def _create_session_config(
         self, messages: Optional[list[BaseMessage]] = None, **kwargs: Any
-    ) -> SessionConfig:
+    ) -> dict[str, Any]:
         """Create session configuration for Copilot SDK.
 
         Args:
@@ -190,7 +190,7 @@ class CopilotChatModel(BaseChatModel):
                     content=system_content,
                 )
 
-        return SessionConfig(**config_params)
+        return config_params
 
     def _messages_to_prompt(self, messages: list[BaseMessage]) -> str:
         parts = []
@@ -275,12 +275,12 @@ class CopilotChatModel(BaseChatModel):
         session_config = self._create_session_config(messages, **kwargs)
 
         # Create a session
-        session = await client.create_session(session_config)
+        session = await client.create_session(**session_config)
 
         try:
             full_prompt = self._messages_to_prompt(messages)
 
-            last_event = await session.send_and_wait({"prompt": full_prompt})
+            last_event = await session.send_and_wait(full_prompt)
 
             response_content = ""
             if last_event is not None and last_event.data is not None:
@@ -357,7 +357,7 @@ class CopilotChatModel(BaseChatModel):
         session_config["streaming"] = True  # Force streaming mode
 
         # Create a session
-        session = await client.create_session(session_config)
+        session = await client.create_session(**session_config)
 
         try:
             full_prompt = self._messages_to_prompt(messages)
@@ -395,7 +395,7 @@ class CopilotChatModel(BaseChatModel):
             session.on(on_event)
 
             # Send the prompt
-            await session.send({"prompt": full_prompt})
+            await session.send(full_prompt)
 
             # Yield chunks as they arrive
             while not complete.is_set() or not chunk_queue.empty():

@@ -16,8 +16,8 @@ classifiers = [
 ]
 
 dependencies = [
-    "github-copilot-sdk>=0.1.32",
-    "langchain-core>=1.2.17",
+    "github-copilot-sdk>=0.2.0",
+    "langchain-core>=1.2.22",
     "pydantic>=2.12.5",
 ]
 
