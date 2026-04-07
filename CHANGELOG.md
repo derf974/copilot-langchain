@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.7](https://github.com/derf974/copilot-langchain/compare/v0.2.6...v0.2.7) (2026-04-07)
+
+
+### Bug Fixes
+
+* update dependencies and refactor CopilotChatModel configuration handling ([#27](https://github.com/derf974/copilot-langchain/issues/27)) ([2a0fabe](https://github.com/derf974/copilot-langchain/commit/2a0fabeeaa67dc6389b2ba6c8a11b748b4777aa2))
+
 ## [0.2.6](https://github.com/derf974/copilot-langchain/compare/v0.2.5...v0.2.6) (2026-03-08)
 
 
