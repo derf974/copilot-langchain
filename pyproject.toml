@@ -3,7 +3,7 @@ name = "langchain-copilot"
 version = "0.2.7"
 description = "LangChain integration for GitHub Copilot SDK"
 readme = "README.md"
-requires-python = ">=3.13.0"
+requires-python = ">=3.11.0"
 authors = [
     { name = "derf974", email = "derf974@users.noreply.github.com" },
 ]
