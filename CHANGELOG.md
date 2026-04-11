@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.8](https://github.com/derf974/copilot-langchain/compare/v0.2.7...v0.2.8) (2026-04-11)
+
+
+### Bug Fixes
+
+* should work with python 3.11 ([#29](https://github.com/derf974/copilot-langchain/issues/29)) ([186f1fe](https://github.com/derf974/copilot-langchain/commit/186f1fea5bbc35524fa1950b51d9a06684aa757f))
+
 ## [0.2.7](https://github.com/derf974/copilot-langchain/compare/v0.2.6...v0.2.7) (2026-04-07)
 
 
