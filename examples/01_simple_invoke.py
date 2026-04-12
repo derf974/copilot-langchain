@@ -10,7 +10,7 @@ def main():
     print("Example: Simple Invoke")
     print("=" * 60)
 
-    model = CopilotChatModel(model="gpt-4o")
+    model = CopilotChatModel(model="gpt-5-mini")
 
     messages = [
         SystemMessage(content="You are a helpful assistant."),

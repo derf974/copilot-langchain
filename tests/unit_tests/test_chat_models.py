@@ -17,8 +17,8 @@ class TestCopilotChatModel:
 
     def test_initialization(self):
         """Test basic model initialization."""
-        model = CopilotChatModel(model_name="gpt-4o")
-        assert model.model_name == "gpt-4o"
+        model = CopilotChatModel(model_name="gpt-5-mini")
+        assert model.model_name == "gpt-5-mini"
         assert model.streaming is False
         assert model._llm_type == "copilot-chat"
 
@@ -30,7 +30,7 @@ class TestCopilotChatModel:
 
     def test_initialization_with_temperature(self):
         """Test model initialization with temperature."""
-        model = CopilotChatModel(model_name="gpt-4o", temperature=0.7, max_tokens=1000)
+        model = CopilotChatModel(model_name="gpt-5-mini", temperature=0.7, max_tokens=1000)
         assert model.temperature == 0.7
         assert model.max_tokens == 1000
 
@@ -54,12 +54,12 @@ class TestCopilotChatModel:
     def test_create_session_config(self):
         """Test session configuration creation."""
         model = CopilotChatModel(
-            model_name="gpt-4o", streaming=True, temperature=0.5, max_tokens=500
+            model_name="gpt-5-mini", streaming=True, temperature=0.5, max_tokens=500
         )
 
         config = model._create_session_config()
 
-        assert config["model"] == "gpt-4o"
+        assert config["model"] == "gpt-5-mini"
         assert config["streaming"] is True
         assert "system_message" not in config
 
@@ -69,7 +69,7 @@ class TestCopilotChatModel:
 
         config = model._create_session_config()
 
-        assert config["model"] == "gpt-4o"
+        assert config["model"] == "gpt-5-mini"
         assert config["streaming"] is False
         assert "temperature" not in config
         assert "max_tokens" not in config
@@ -86,7 +86,7 @@ class TestCopilotChatModel:
 
         config = model._create_session_config(messages)
 
-        assert config["model"] == "gpt-4o"
+        assert config["model"] == "gpt-5-mini"
         assert "system_message" in config
         assert config["system_message"]["content"] == "You are a helpful assistant."
 
@@ -102,7 +102,7 @@ class TestCopilotChatModel:
 
         config = model._create_session_config(messages)
 
-        assert config["model"] == "gpt-4o"
+        assert config["model"] == "gpt-5-mini"
         assert "system_message" in config
         assert (
             config["system_message"]["content"]
@@ -301,7 +301,7 @@ class TestCopilotChatModel:
             handler=mock_tool_handler,
         )
 
-        model = CopilotChatModel(model_name="gpt-4o", tools=[tool])
+        model = CopilotChatModel(model_name="gpt-5-mini", tools=[tool])
         assert model.tools is not None
         assert len(model.tools) == 1
         assert model.tools[0].name == "test_tool"
@@ -323,7 +323,7 @@ class TestCopilotChatModel:
             handler=mock_tool_handler,
         )
 
-        model = CopilotChatModel(model_name="gpt-4o", tools=[tool])
+        model = CopilotChatModel(model_name="gpt-5-mini", tools=[tool])
         config = model._create_session_config()
 
         assert "tools" in config
@@ -524,7 +524,7 @@ class TestCopilotChatModel:
             handler=mock_handler,
         )
 
-        model = CopilotChatModel(model="gpt-4o")
+        model = CopilotChatModel(model="gpt-5-mini")
         bound_model = model.bind_tools([tool])
 
         # Should return a RunnableBinding
@@ -547,7 +547,7 @@ class TestCopilotChatModel:
         async def add_numbers(params: CalcParams) -> str:
             return str(params.a + params.b)
 
-        model = CopilotChatModel(model="gpt-4o")
+        model = CopilotChatModel(model="gpt-5-mini")
         bound_model = model.bind_tools([add_numbers])
 
         from langchain_core.runnables import RunnableBinding
@@ -564,7 +564,7 @@ class TestCopilotChatModel:
             """Search for information."""
             return f"Results for: {query}"
 
-        model = CopilotChatModel(model="gpt-4o")
+        model = CopilotChatModel(model="gpt-5-mini")
         bound_model = model.bind_tools([search])
 
         from langchain_core.runnables import RunnableBinding
@@ -582,7 +582,7 @@ class TestCopilotChatModel:
             """Double a number."""
             return x * 2
 
-        model = CopilotChatModel(model="gpt-4o")
+        model = CopilotChatModel(model="gpt-5-mini")
         bound_model = model.bind_tools([plain_function])
 
         from langchain_core.runnables import RunnableBinding
@@ -602,7 +602,7 @@ class TestCopilotChatModel:
             }
         }
 
-        model = CopilotChatModel(model="gpt-4o")
+        model = CopilotChatModel(model="gpt-5-mini")
 
         # Dict schemas are now skipped (no error raised)
         bound_model = model.bind_tools([tool_dict])
@@ -616,7 +616,7 @@ class TestCopilotChatModel:
     def test_bind_tools_preserves_model_config(self):
         """Test that bind_tools preserves other model configuration."""
         model = CopilotChatModel(
-            model="gpt-4o", temperature=0.7, max_tokens=1000, streaming=True
+            model="gpt-5-mini", temperature=0.7, max_tokens=1000, streaming=True
         )
 
         class TestParams(BaseModel):
@@ -632,7 +632,7 @@ class TestCopilotChatModel:
 
         assert isinstance(bound_model, RunnableBinding)
         # The bound object wraps the original model
-        assert bound_model.bound.model_name == "gpt-4o"
+        assert bound_model.bound.model_name == "gpt-5-mini"
         assert bound_model.bound.streaming is True
 
     def test_messages_to_prompt_with_only_system_messages(self):

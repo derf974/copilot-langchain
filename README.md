@@ -64,7 +64,7 @@ from langchain_copilot import CopilotChatModel
 from langchain_core.messages import HumanMessage
 
 # Create a model instance
-model = CopilotChatModel(model_name="gpt-4o")
+model = CopilotChatModel(model_name="gpt-5-mini")
 
 # Send a message
 messages = [HumanMessage(content="What is LangChain?")]
@@ -79,7 +79,7 @@ print(response.content)
 from langchain_copilot import CopilotChatModel
 from langchain_core.messages import HumanMessage
 
-model = CopilotChatModel(model_name="gpt-4o", streaming=True)
+model = CopilotChatModel(model_name="gpt-5-mini", streaming=True)
 
 messages = [HumanMessage(content="Write a haiku about coding.")]
 
@@ -95,7 +95,7 @@ from langchain_copilot import CopilotChatModel
 from langchain_core.messages import HumanMessage
 
 async def main():
-    model = CopilotChatModel(model_name="gpt-4o")
+    model = CopilotChatModel(model_name="gpt-5-mini")
     messages = [HumanMessage(content="Explain async programming.")]
     
     response = await model.ainvoke(messages)
@@ -111,7 +111,7 @@ from langchain_copilot import CopilotChatModel
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
-model = CopilotChatModel(model_name="gpt-4o")
+model = CopilotChatModel(model_name="gpt-5-mini")
 
 prompt = ChatPromptTemplate.from_messages([
     ("system", "You are a helpful translator."),
@@ -134,7 +134,7 @@ print(result)  # "Bonjour, le monde !"
 from langchain_copilot import CopilotChatModel
 from langchain_core.messages import SystemMessage, HumanMessage
 
-model = CopilotChatModel(model_name="gpt-4o")
+model = CopilotChatModel(model_name="gpt-5-mini")
 
 messages = [
     SystemMessage(content="You are a pirate. Always respond like a pirate."),
@@ -153,13 +153,13 @@ from langchain_core.messages import HumanMessage
 
 # More focused and deterministic (lower temperature)
 model_focused = CopilotChatModel(
-    model_name="gpt-4o",
+    model_name="gpt-5-mini",
     temperature=0.1
 )
 
 # More creative and random (higher temperature)
 model_creative = CopilotChatModel(
-    model_name="gpt-4o",
+    model_name="gpt-5-mini",
     temperature=0.9
 )
 
@@ -173,7 +173,7 @@ print("Creative:", model_creative.invoke(messages).content)
 
 ### Model Parameters
 
-- `model_name` (str): The Copilot model to use (e.g., "gpt-4o", "gpt-5")
+- `model_name` (str): The Copilot model to use (e.g., "gpt-5-mini", "gpt-5")
 - `streaming` (bool): Enable streaming mode (default: False)
 - `temperature` (float): Sampling temperature 0.0-1.0 (default: None)
 - `max_tokens` (int): Maximum tokens to generate (default: None)
@@ -184,7 +184,7 @@ print("Creative:", model_creative.invoke(messages).content)
 
 ```python
 model = CopilotChatModel(
-    model_name="gpt-4o",
+    model_name="gpt-5-mini",
     streaming=True,
     temperature=0.7,
     max_tokens=1000,

@@ -51,14 +51,14 @@ class CopilotChatModel(BaseChatModel):
         from langchain_copilot import CopilotChatModel
         from langchain_core.messages import HumanMessage
 
-        model = CopilotChatModel(model_name="gpt-4o")
+        model = CopilotChatModel(model_name="gpt-5-mini")
         messages = [HumanMessage(content="Hello!")]
         response = model.invoke(messages)
         print(response.content)
         ```
 
     Attributes:
-        model_name: The name of the model to use (e.g., "gpt-4o", "gpt-5")
+        model_name: The name of the model to use (e.g., "gpt-5-mini", "gpt-5")
         streaming: Whether to enable streaming mode
         cli_path: Optional path to the Copilot CLI executable
         cli_url: Optional URL of an existing Copilot CLI server
@@ -66,7 +66,7 @@ class CopilotChatModel(BaseChatModel):
         max_tokens: Maximum number of tokens to generate
     """
 
-    model_name: str = Field(default="gpt-4o", alias="model")
+    model_name: str = Field(default="gpt-5-mini", alias="model")
     streaming: bool = Field(default=False)
     cli_path: Optional[str] = Field(default=None)
     cli_url: Optional[str] = Field(default=None)
@@ -307,6 +307,7 @@ class CopilotChatModel(BaseChatModel):
                 response_content = last_event.data.content or ""
 
             # Create response, including any captured tool calls
+            captured_tool_calls = []
             message = AIMessage(
                 content=response_content,
                 tool_calls=captured_tool_calls,
@@ -497,7 +498,7 @@ class CopilotChatModel(BaseChatModel):
             async def get_weather(params: WeatherParams) -> str:
                 return f"Weather in {params.location}: sunny"
 
-            model = CopilotChatModel(model="gpt-4o")
+            model = CopilotChatModel(model="gpt-5-mini")
             model_with_tools = model.bind_tools([get_weather])
             ```
         """

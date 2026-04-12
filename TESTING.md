@@ -185,7 +185,7 @@ class TestCopilotChatModelIntegration(ChatModelIntegrationTests):
     def chat_model_params(self) -> dict:
         """Return initialization parameters for the model."""
         return {
-            "model_name": "gpt-4o",
+            "model_name": "gpt-5-mini",
             "temperature": 0,
         }
 ```

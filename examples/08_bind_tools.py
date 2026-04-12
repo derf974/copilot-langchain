@@ -55,7 +55,7 @@ def main():
     print("=" * 60)
 
     # Create base model
-    model = CopilotChatModel(model="gpt-4o")
+    model = CopilotChatModel(model="gpt-5-mini")
 
     # Bind tools using bind_tools (LangChain standard pattern)
     # This returns a RunnableBinding that includes the tools

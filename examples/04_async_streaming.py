@@ -11,7 +11,7 @@ async def main():
     print("Example: Async Streaming")
     print("=" * 60)
 
-    model = CopilotChatModel(model="gpt-4o", streaming=True)
+    model = CopilotChatModel(model="gpt-5-mini", streaming=True)
 
     messages = [HumanMessage(content="Count from 1 to 5.")]
 

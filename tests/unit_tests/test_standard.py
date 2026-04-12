@@ -34,11 +34,11 @@ class TestCopilotChatModelUnit(ChatModelUnitTests):
         """Return initialization parameters for the model.
 
         These parameters will be used to instantiate CopilotChatModel
-        for each test. Using gpt-4o with temperature=0 for deterministic
+        for each test. Using gpt-5-mini with temperature=0 for deterministic
         responses in tests.
         """
         return {
-            "model_name": "gpt-4o",
+            "model_name": "gpt-5-mini",
             "temperature": 0,
         }
 
@@ -118,7 +118,7 @@ class TestCopilotChatModelUnit(ChatModelUnitTests):
     @property
     def model_override_value(self) -> str:
         """Alternative model to test model override functionality."""
-        return "gpt-4o-mini"
+        return "gpt-5-mini-mini"
 
     # Note: init_from_env_params is not implemented yet as CopilotChatModel
     # doesn't currently support initialization from environment variables

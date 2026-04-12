@@ -12,7 +12,7 @@ class TestCopilotChatModelIntegration:
     @pytest.mark.asyncio
     async def test_real_invocation(self):
         """Test real invocation (requires Copilot CLI)."""
-        model = CopilotChatModel(model_name="gpt-4o")
+        model = CopilotChatModel(model_name="gpt-5-mini")
         messages = [HumanMessage(content="Say 'test passed' and nothing else.")]
 
         result = await model._agenerate(messages)
@@ -23,7 +23,7 @@ class TestCopilotChatModelIntegration:
     @pytest.mark.integration
     def test_real_invoke_sync(self):
         """Test real synchronous invocation (requires Copilot CLI)."""
-        model = CopilotChatModel(model_name="gpt-4o")
+        model = CopilotChatModel(model_name="gpt-5-mini")
         messages = [HumanMessage(content="Say 'test passed' and nothing else.")]
 
         result = model.invoke(messages)
@@ -34,7 +34,7 @@ class TestCopilotChatModelIntegration:
     @pytest.mark.asyncio
     async def test_real_streaming(self):
         """Test real streaming (requires Copilot CLI)."""
-        model = CopilotChatModel(model_name="gpt-4o", streaming=True)
+        model = CopilotChatModel(model_name="gpt-5-mini", streaming=True)
         messages = [HumanMessage(content="Count from 1 to 3.")]
 
         chunks = []
@@ -52,7 +52,7 @@ class TestCopilotChatModelIntegration:
         from langchain_core.prompts import ChatPromptTemplate
         from langchain_core.output_parsers import StrOutputParser
 
-        model = CopilotChatModel(model_name="gpt-4o")
+        model = CopilotChatModel(model_name="gpt-5-mini")
 
         prompt = ChatPromptTemplate.from_messages(
             [
