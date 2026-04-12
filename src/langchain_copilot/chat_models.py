@@ -287,9 +287,7 @@ class CopilotChatModel(BaseChatModel):
                 )
                 return future.result()
         else:
-            return asyncio.run(
-                self._agenerate(messages, stop, run_manager, **kwargs)
-            )
+            return asyncio.run(self._agenerate(messages, stop, run_manager, **kwargs))
 
     async def _agenerate(
         self,
@@ -334,9 +332,7 @@ class CopilotChatModel(BaseChatModel):
             def _capture_tool_calls(evt: Any) -> None:
                 try:
                     evt_type = (
-                        evt.type.value
-                        if hasattr(evt.type, "value")
-                        else str(evt.type)
+                        evt.type.value if hasattr(evt.type, "value") else str(evt.type)
                     )
                     if (
                         evt_type == "tool.execution_start"
@@ -438,7 +434,9 @@ class CopilotChatModel(BaseChatModel):
                 except Exception as exc:
                     results.append(exc)
             else:
-                results.append(await self.ainvoke(input_, config=input_config, **kwargs))
+                results.append(
+                    await self.ainvoke(input_, config=input_config, **kwargs)
+                )
 
         return results
 
@@ -508,7 +506,9 @@ class CopilotChatModel(BaseChatModel):
 
         # Collect the names of tools we registered so we can filter events
         registered_tools_stream: list = session_config.get("tools") or []
-        registered_tool_names_stream: set[str] = {t.name for t in registered_tools_stream}
+        registered_tool_names_stream: set[str] = {
+            t.name for t in registered_tools_stream
+        }
 
         # Create a session
         session = await client.create_session(**session_config)
@@ -543,7 +543,10 @@ class CopilotChatModel(BaseChatModel):
                         if not captured_tool_calls_stream:
                             content = event.data.delta_content or ""
                             asyncio.create_task(chunk_queue.put(content))
-                    elif evt_type in ("assistant.reasoning_delta", "assistant.reasoning"):
+                    elif evt_type in (
+                        "assistant.reasoning_delta",
+                        "assistant.reasoning",
+                    ):
                         pass
                     elif evt_type == "assistant.message":
                         # First turn ends: signal text streaming is done.

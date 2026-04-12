@@ -30,7 +30,9 @@ class TestCopilotChatModel:
 
     def test_initialization_with_temperature(self):
         """Test model initialization with temperature."""
-        model = CopilotChatModel(model_name="gpt-5-mini", temperature=0.7, max_tokens=1000)
+        model = CopilotChatModel(
+            model_name="gpt-5-mini", temperature=0.7, max_tokens=1000
+        )
         assert model.temperature == 0.7
         assert model.max_tokens == 1000
 
@@ -658,7 +660,10 @@ class TestCopilotChatModel:
             result = await model.abatch(["Hello", "Hey"])
 
         assert [message.content for message in result] == ["first", "second"]
-        assert [call.args[0] for call in mock_ainvoke.call_args_list] == ["Hello", "Hey"]
+        assert [call.args[0] for call in mock_ainvoke.call_args_list] == [
+            "Hello",
+            "Hey",
+        ]
 
     @pytest.mark.asyncio
     async def test_abatch_return_exceptions(self):
@@ -668,9 +673,7 @@ class TestCopilotChatModel:
         with patch.object(
             CopilotChatModel,
             "ainvoke",
-            new=AsyncMock(
-                side_effect=[AIMessage(content="first"), ValueError("boom")]
-            ),
+            new=AsyncMock(side_effect=[AIMessage(content="first"), ValueError("boom")]),
         ):
             result = await model.abatch(["Hello", "Hey"], return_exceptions=True)
 

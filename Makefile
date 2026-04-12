@@ -17,6 +17,7 @@ test-all: ## Exécuter tous les tests (unitaires + intégration)
 
 lint: ## Vérifier le code avec ruff
 	uv run ruff check .
+	uv run black --check .
 
 format: ## Formater le code avec black et ruff
 	uv run black .
