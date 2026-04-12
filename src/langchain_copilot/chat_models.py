@@ -12,6 +12,8 @@ from langchain_core.callbacks import (
 )
 from langchain_core.language_models.base import LanguageModelInput
 from langchain_core.language_models.chat_models import BaseChatModel
+import json
+
 from langchain_core.messages import (
     AIMessage,
     AIMessageChunk,
@@ -217,9 +219,22 @@ class CopilotChatModel(BaseChatModel):
             if isinstance(msg, HumanMessage):
                 parts.append(f"User: {msg.content}")
             elif isinstance(msg, AIMessage):
-                parts.append(f"Assistant: {msg.content}")
+                if msg.tool_calls:
+                    # Represent tool call intents so the model has context on turn 2+
+                    tc_strs = [
+                        f"{tc['name']}({json.dumps(tc['args'])})"
+                        for tc in msg.tool_calls
+                    ]
+                    parts.append(f"Assistant: [Called tools: {', '.join(tc_strs)}]")
+                elif msg.content:
+                    parts.append(f"Assistant: {msg.content}")
+                # Skip empty AIMessage with no tool calls (no useful content)
             elif isinstance(msg, ToolMessage):
-                parts.append(f"Tool: {msg.content}")
+                tool_name = getattr(msg, "name", "") or ""
+                if tool_name:
+                    parts.append(f"Tool result ({tool_name}): {msg.content}")
+                else:
+                    parts.append(f"Tool result: {msg.content}")
             elif isinstance(msg, SystemMessage):
                 # Skip SystemMessage - they are extracted separately in _create_session_config
                 # to avoid prompt injection risks
@@ -299,25 +314,67 @@ class CopilotChatModel(BaseChatModel):
         effective_model = kwargs.get("model", self.model_name)
         session_config = self._create_session_config(messages, **kwargs)
 
+        # Collect the names of tools we registered so we can filter events
+        registered_tools: list = session_config.get("tools") or []
+        registered_tool_names: set[str] = {t.name for t in registered_tools}
+
         # Create a session
         session = await client.create_session(**session_config)
 
         try:
             full_prompt = self._messages_to_prompt(messages)
 
+            # Capture tool-call intents emitted during the Copilot agentic loop.
+            # The Copilot SDK executes tools automatically inside the loop, but
+            # LangChain expects the *caller* to execute tools.  We intercept the
+            # tool.execution_start events to collect the model's tool-call intents
+            # and surface them as AIMessage.tool_calls.
+            captured_tool_calls: list[dict] = []
+
+            def _capture_tool_calls(evt: Any) -> None:
+                try:
+                    evt_type = (
+                        evt.type.value
+                        if hasattr(evt.type, "value")
+                        else str(evt.type)
+                    )
+                    if (
+                        evt_type == "tool.execution_start"
+                        and evt.data.tool_name in registered_tool_names
+                    ):
+                        captured_tool_calls.append(
+                            {
+                                "name": evt.data.tool_name,
+                                "args": evt.data.arguments or {},
+                                "id": evt.data.tool_call_id,
+                                "type": "tool_call",
+                            }
+                        )
+                except (AttributeError, KeyError):
+                    pass
+
+            if registered_tool_names:
+                session.on(_capture_tool_calls)
+
             last_event = await session.send_and_wait(full_prompt)
 
-            response_content = ""
-            if last_event is not None and last_event.data is not None:
-                response_content = last_event.data.content or ""
+            if captured_tool_calls:
+                # Return tool-call intents so the LangChain caller can execute them
+                message = AIMessage(
+                    content="",
+                    tool_calls=captured_tool_calls,
+                    response_metadata={"model_name": effective_model},
+                )
+            else:
+                response_content = ""
+                if last_event is not None and last_event.data is not None:
+                    response_content = last_event.data.content or ""
+                message = AIMessage(
+                    content=response_content,
+                    tool_calls=[],
+                    response_metadata={"model_name": effective_model},
+                )
 
-            # Create response, including any captured tool calls
-            captured_tool_calls = []
-            message = AIMessage(
-                content=response_content,
-                tool_calls=captured_tool_calls,
-                response_metadata={"model_name": effective_model},
-            )
             generation = ChatGeneration(message=message)
 
             return ChatResult(generations=[generation])
@@ -449,56 +506,87 @@ class CopilotChatModel(BaseChatModel):
         session_config = self._create_session_config(messages, **kwargs)
         session_config["streaming"] = True  # Force streaming mode
 
+        # Collect the names of tools we registered so we can filter events
+        registered_tools_stream: list = session_config.get("tools") or []
+        registered_tool_names_stream: set[str] = {t.name for t in registered_tools_stream}
+
         # Create a session
         session = await client.create_session(**session_config)
 
         try:
             full_prompt = self._messages_to_prompt(messages)
 
-            # Queue to collect chunks
+            # Queue to collect text chunks from streaming.
             chunk_queue: asyncio.Queue = asyncio.Queue()
-            complete = asyncio.Event()
+
+            # text_stream_done: set when the first assistant.message fires.
+            # (The SDK fires assistant.message with empty content before executing tools,
+            # so this signals "no more text deltas are coming for this turn".)
+            text_stream_done: asyncio.Event = asyncio.Event()
+
+            # complete: set when we have all the information we need.
+            # - Without tools: set on assistant.message (same as text_stream_done).
+            # - With tools: set on tool.execution_start (has what we need) or session.idle.
+            complete: asyncio.Event = asyncio.Event()
+
+            captured_tool_calls_stream: list[dict] = []
 
             def on_event(event):
                 try:
-                    if event.type.value == "assistant.message_delta":
-                        # Streaming message chunk - print incrementally
-                        content = event.data.delta_content or ""
-                        asyncio.create_task(chunk_queue.put(content))
-                    elif event.type.value == "assistant.reasoning_delta":
-                        # Streaming reasoning chunk (if model supports reasoning)
-                        # content = event.data.delta_content or ""
-                        # asyncio.create_task(chunk_queue.put(content))
+                    evt_type = (
+                        event.type.value
+                        if hasattr(event.type, "value")
+                        else str(event.type)
+                    )
+                    if evt_type == "assistant.message_delta":
+                        # Yield text deltas only while no tool call has been captured yet
+                        if not captured_tool_calls_stream:
+                            content = event.data.delta_content or ""
+                            asyncio.create_task(chunk_queue.put(content))
+                    elif evt_type in ("assistant.reasoning_delta", "assistant.reasoning"):
                         pass
-                    elif event.type.value == "assistant.message":
-                        # Final message - complete content
-                        asyncio.create_task(chunk_queue.put(None))
+                    elif evt_type == "assistant.message":
+                        # First turn ends: signal text streaming is done.
+                        text_stream_done.set()
+                        asyncio.create_task(chunk_queue.put(None))  # sentinel
+                        # For sessions without tools, this is also the "complete" signal.
+                        if not registered_tool_names_stream:
+                            complete.set()
+                    elif evt_type == "session.idle":
+                        # Fallback: always complete on session.idle
                         complete.set()
-                    elif event.type.value == "assistant.reasoning":
-                        # Final reasoning content (if model supports reasoning)
-                        pass
-                    elif event.type.value == "session.idle":
-                        # Session finished processing
+                    elif (
+                        evt_type == "tool.execution_start"
+                        and event.data.tool_name in registered_tool_names_stream
+                    ):
+                        # Capture tool-call intent for LangChain tool_calls
+                        captured_tool_calls_stream.append(
+                            {
+                                "name": event.data.tool_name,
+                                "args": event.data.arguments or {},
+                                "id": event.data.tool_call_id,
+                                "type": "tool_call",
+                            }
+                        )
+                        # We have what we need; signal completion.
                         complete.set()
                 except (AttributeError, KeyError):
                     # Ignore malformed events
                     pass
 
-            # Register event listener
+            # Register event listener and send the prompt
             session.on(on_event)
-
-            # Send the prompt
             await session.send(full_prompt)
 
-            # Yield chunks as they arrive
-            while not complete.is_set() or not chunk_queue.empty():
+            # Phase 1: stream text chunks until the first turn ends.
+            while not text_stream_done.is_set() or not chunk_queue.empty():
                 try:
                     chunk_content = await asyncio.wait_for(
                         chunk_queue.get(), timeout=0.1
                     )
 
                     if chunk_content is None:
-                        # End of stream
+                        # Sentinel: end of text stream
                         break
 
                     chunk = ChatGenerationChunk(
@@ -513,14 +601,45 @@ class CopilotChatModel(BaseChatModel):
                 except asyncio.TimeoutError:
                     continue
 
-            # Yield a final empty chunk with response_metadata so the merged
-            # result has model_name available (e.g. test_stream_with_model_override)
-            yield ChatGenerationChunk(
-                message=AIMessageChunk(
-                    content="",
-                    response_metadata={"model_name": effective_model},
+            # Phase 2: if tools are registered, wait for tool.execution_start
+            # (or session.idle) to fire.  This must happen AFTER the text loop
+            # because tool.execution_start arrives slightly after assistant.message.
+            if registered_tool_names_stream and not complete.is_set():
+                try:
+                    await asyncio.wait_for(complete.wait(), timeout=30.0)
+                except asyncio.TimeoutError:
+                    pass  # Give up; no tool calls detected
+
+            # Phase 3: yield the appropriate final chunk.
+            if captured_tool_calls_stream:
+                # Emit tool-call intents as tool_call_chunks so they accumulate
+                # into AIMessage.tool_calls when the caller merges all chunks.
+                tool_call_chunks = [
+                    {
+                        "name": tc["name"],
+                        "args": json.dumps(tc["args"]),
+                        "id": tc["id"],
+                        "index": i,
+                        "type": "tool_call_chunk",
+                    }
+                    for i, tc in enumerate(captured_tool_calls_stream)
+                ]
+                yield ChatGenerationChunk(
+                    message=AIMessageChunk(
+                        content="",
+                        tool_call_chunks=tool_call_chunks,
+                        response_metadata={"model_name": effective_model},
+                    )
                 )
-            )
+            else:
+                # Yield a final empty chunk with response_metadata so the merged
+                # result has model_name available (e.g. test_stream_with_model_override)
+                yield ChatGenerationChunk(
+                    message=AIMessageChunk(
+                        content="",
+                        response_metadata={"model_name": effective_model},
+                    )
+                )
 
         finally:
             # Disconnect session only; the shared client stays alive for reuse
