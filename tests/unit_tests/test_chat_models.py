@@ -613,6 +613,70 @@ class TestCopilotChatModel:
         # No tools should be bound since dict schemas are skipped
         assert bound_model.kwargs.get("tools", []) == []
 
+    def test_batch_runs_sequentially(self):
+        """Test that batch uses sequential invoke calls."""
+        model = CopilotChatModel(model="gpt-5-mini")
+
+        with patch.object(
+            CopilotChatModel,
+            "invoke",
+            autospec=True,
+            side_effect=[AIMessage(content="first"), AIMessage(content="second")],
+        ) as mock_invoke:
+            result = model.batch(["Hello", "Hey"])
+
+        assert [message.content for message in result] == ["first", "second"]
+        assert [call.args[1] for call in mock_invoke.call_args_list] == ["Hello", "Hey"]
+
+    def test_batch_return_exceptions(self):
+        """Test that batch preserves return_exceptions behavior."""
+        model = CopilotChatModel(model="gpt-5-mini")
+
+        with patch.object(
+            CopilotChatModel,
+            "invoke",
+            autospec=True,
+            side_effect=[AIMessage(content="first"), ValueError("boom")],
+        ):
+            result = model.batch(["Hello", "Hey"], return_exceptions=True)
+
+        assert result[0].content == "first"
+        assert isinstance(result[1], ValueError)
+
+    @pytest.mark.asyncio
+    async def test_abatch_runs_sequentially(self):
+        """Test that abatch uses sequential ainvoke calls."""
+        model = CopilotChatModel(model="gpt-5-mini")
+
+        with patch.object(
+            CopilotChatModel,
+            "ainvoke",
+            new=AsyncMock(
+                side_effect=[AIMessage(content="first"), AIMessage(content="second")]
+            ),
+        ) as mock_ainvoke:
+            result = await model.abatch(["Hello", "Hey"])
+
+        assert [message.content for message in result] == ["first", "second"]
+        assert [call.args[0] for call in mock_ainvoke.call_args_list] == ["Hello", "Hey"]
+
+    @pytest.mark.asyncio
+    async def test_abatch_return_exceptions(self):
+        """Test that abatch preserves return_exceptions behavior."""
+        model = CopilotChatModel(model="gpt-5-mini")
+
+        with patch.object(
+            CopilotChatModel,
+            "ainvoke",
+            new=AsyncMock(
+                side_effect=[AIMessage(content="first"), ValueError("boom")]
+            ),
+        ):
+            result = await model.abatch(["Hello", "Hey"], return_exceptions=True)
+
+        assert result[0].content == "first"
+        assert isinstance(result[1], ValueError)
+
     def test_bind_tools_preserves_model_config(self):
         """Test that bind_tools preserves other model configuration."""
         model = CopilotChatModel(

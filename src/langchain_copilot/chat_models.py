@@ -21,7 +21,12 @@ from langchain_core.messages import (
     ToolMessage,
 )
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
-from langchain_core.runnables import Runnable, RunnableBinding
+from langchain_core.runnables import (
+    Runnable,
+    RunnableBinding,
+    RunnableConfig,
+    get_config_list,
+)
 from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import ConfigDict, Field, model_validator
@@ -252,7 +257,7 @@ class CopilotChatModel(BaseChatModel):
         """
         # Run async version in sync context
         try:
-            loop = asyncio.get_running_loop()
+            asyncio.get_running_loop()
             is_running = True
         except RuntimeError:
             is_running = False
@@ -320,6 +325,65 @@ class CopilotChatModel(BaseChatModel):
         finally:
             # Disconnect session only; the shared client stays alive for reuse
             await session.disconnect()
+
+    def batch(
+        self,
+        inputs: list[LanguageModelInput],
+        config: RunnableConfig | list[RunnableConfig] | None = None,
+        *,
+        return_exceptions: bool = False,
+        **kwargs: Any,
+    ) -> list[AIMessage]:
+        """Run batch requests sequentially.
+
+        LangChain's default batch implementation uses a thread pool. The Copilot SDK
+        client is tied to an asyncio event loop, so cross-thread reuse of the shared
+        client can deadlock integration tests such as test_batch.
+        """
+        if not inputs:
+            return []
+
+        configs = get_config_list(config, len(inputs))
+        results = []
+
+        for input_, input_config in zip(inputs, configs, strict=False):
+            if return_exceptions:
+                try:
+                    results.append(self.invoke(input_, config=input_config, **kwargs))
+                except Exception as exc:
+                    results.append(exc)
+            else:
+                results.append(self.invoke(input_, config=input_config, **kwargs))
+
+        return results
+
+    async def abatch(
+        self,
+        inputs: list[LanguageModelInput],
+        config: RunnableConfig | list[RunnableConfig] | None = None,
+        *,
+        return_exceptions: bool = False,
+        **kwargs: Any,
+    ) -> list[AIMessage]:
+        """Run async batch requests sequentially on the active event loop."""
+        if not inputs:
+            return []
+
+        configs = get_config_list(config, len(inputs))
+        results = []
+
+        for input_, input_config in zip(inputs, configs, strict=False):
+            if return_exceptions:
+                try:
+                    results.append(
+                        await self.ainvoke(input_, config=input_config, **kwargs)
+                    )
+                except Exception as exc:
+                    results.append(exc)
+            else:
+                results.append(await self.ainvoke(input_, config=input_config, **kwargs))
+
+        return results
 
     def _stream(
         self,
