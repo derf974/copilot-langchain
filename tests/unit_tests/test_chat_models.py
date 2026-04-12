@@ -6,8 +6,9 @@ from unittest.mock import AsyncMock, patch
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from langchain_core.tools import tool
 from langchain_copilot import CopilotChatModel
-from copilot import Tool, define_tool
-from copilot.types import ExternalServerConfig, SubprocessConfig
+from copilot import define_tool
+from copilot.client import ExternalServerConfig, SubprocessConfig
+from copilot.tools import Tool
 from pydantic import BaseModel, Field
 
 
@@ -285,7 +286,7 @@ class TestCopilotChatModel:
 
     def test_initialization_with_tools(self):
         """Test model initialization with tools."""
-        from copilot import Tool
+        from copilot.tools import Tool
 
         async def mock_tool_handler(invocation):
             return {"textResultForLlm": "Result", "resultType": "success"}
@@ -307,7 +308,7 @@ class TestCopilotChatModel:
 
     def test_create_session_config_with_tools(self):
         """Test session configuration includes tools."""
-        from copilot import Tool
+        from copilot.tools import Tool
 
         async def mock_tool_handler(invocation):
             return {"textResultForLlm": "Result", "resultType": "success"}
@@ -339,7 +340,7 @@ class TestCopilotChatModel:
     @pytest.mark.asyncio
     async def test_agenerate_with_tools(self):
         """Test async generation with tools."""
-        from copilot import Tool
+        from copilot.tools import Tool
 
         CopilotChatModel._shared_client = None
 
@@ -399,7 +400,7 @@ class TestCopilotChatModel:
     @pytest.mark.asyncio
     async def test_astream_with_tools(self):
         """Test async streaming with tools."""
-        from copilot import Tool
+        from copilot.tools import Tool
 
         CopilotChatModel._shared_client = None
 

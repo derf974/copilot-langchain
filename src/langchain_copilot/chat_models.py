@@ -26,12 +26,10 @@ from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import ConfigDict, Field, model_validator
 
-from copilot import CopilotClient, PermissionHandler, Tool
-from copilot.types import (
-    ExternalServerConfig,
-    SubprocessConfig,
-    SystemMessageReplaceConfig,
-)
+from copilot import CopilotClient
+from copilot.session import PermissionHandler, SystemMessageReplaceConfig
+from copilot.tools import Tool
+from copilot.client import ExternalServerConfig, SubprocessConfig
 
 import logging
 
