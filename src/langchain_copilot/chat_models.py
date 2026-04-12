@@ -35,7 +35,7 @@ from pydantic import ConfigDict, Field, model_validator
 
 from copilot import CopilotClient
 from copilot.session import PermissionHandler, SystemMessageReplaceConfig
-from copilot.tools import Tool
+from copilot.tools import Tool, ToolResult
 from copilot.client import ExternalServerConfig, SubprocessConfig
 
 import logging
