@@ -34,11 +34,11 @@ class TestCopilotChatModelIntegration(ChatModelIntegrationTests):
         """Return initialization parameters for the model.
 
         These parameters will be used to instantiate CopilotChatModel
-        for each test. Using gpt-4o with temperature=0 for deterministic
+        for each test. Using gpt-4.1 with temperature=0 for deterministic
         responses in tests.
         """
         return {
-            "model_name": "gpt-4o",
+            "model_name": "gpt-4.1",
             "temperature": 0,
         }
 
@@ -118,4 +118,4 @@ class TestCopilotChatModelIntegration(ChatModelIntegrationTests):
     @property
     def model_override_value(self) -> str:
         """Alternative model to test model override functionality."""
-        return "gpt-4o-mini"
+        return "gpt-5-mini"

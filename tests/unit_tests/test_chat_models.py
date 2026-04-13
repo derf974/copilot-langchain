@@ -17,8 +17,8 @@ class TestCopilotChatModel:
 
     def test_initialization(self):
         """Test basic model initialization."""
-        model = CopilotChatModel(model_name="gpt-4o")
-        assert model.model_name == "gpt-4o"
+        model = CopilotChatModel(model_name="gpt-5-mini")
+        assert model.model_name == "gpt-5-mini"
         assert model.streaming is False
         assert model._llm_type == "copilot-chat"
 
@@ -30,7 +30,9 @@ class TestCopilotChatModel:
 
     def test_initialization_with_temperature(self):
         """Test model initialization with temperature."""
-        model = CopilotChatModel(model_name="gpt-4o", temperature=0.7, max_tokens=1000)
+        model = CopilotChatModel(
+            model_name="gpt-5-mini", temperature=0.7, max_tokens=1000
+        )
         assert model.temperature == 0.7
         assert model.max_tokens == 1000
 
@@ -54,12 +56,12 @@ class TestCopilotChatModel:
     def test_create_session_config(self):
         """Test session configuration creation."""
         model = CopilotChatModel(
-            model_name="gpt-4o", streaming=True, temperature=0.5, max_tokens=500
+            model_name="gpt-5-mini", streaming=True, temperature=0.5, max_tokens=500
         )
 
         config = model._create_session_config()
 
-        assert config["model"] == "gpt-4o"
+        assert config["model"] == "gpt-5-mini"
         assert config["streaming"] is True
         assert "system_message" not in config
 
@@ -69,7 +71,7 @@ class TestCopilotChatModel:
 
         config = model._create_session_config()
 
-        assert config["model"] == "gpt-4o"
+        assert config["model"] == "gpt-5-mini"
         assert config["streaming"] is False
         assert "temperature" not in config
         assert "max_tokens" not in config
@@ -86,7 +88,7 @@ class TestCopilotChatModel:
 
         config = model._create_session_config(messages)
 
-        assert config["model"] == "gpt-4o"
+        assert config["model"] == "gpt-5-mini"
         assert "system_message" in config
         assert config["system_message"]["content"] == "You are a helpful assistant."
 
@@ -102,7 +104,7 @@ class TestCopilotChatModel:
 
         config = model._create_session_config(messages)
 
-        assert config["model"] == "gpt-4o"
+        assert config["model"] == "gpt-5-mini"
         assert "system_message" in config
         assert (
             config["system_message"]["content"]
@@ -114,6 +116,7 @@ class TestCopilotChatModel:
         """Test that _get_client creates and starts a client."""
         # Reset shared client
         CopilotChatModel._shared_client = None
+        CopilotChatModel._shared_loop = None
 
         with patch("langchain_copilot.chat_models.CopilotClient") as mock_client_class:
             mock_client = AsyncMock()
@@ -134,6 +137,7 @@ class TestCopilotChatModel:
         # Setup existing client
         existing_client = AsyncMock()
         CopilotChatModel._shared_client = existing_client
+        CopilotChatModel._shared_loop = asyncio.get_running_loop()
 
         model = CopilotChatModel()
         client = await model._get_client()
@@ -145,6 +149,7 @@ class TestCopilotChatModel:
     async def test_get_client_with_cli_url(self):
         """Test that _get_client passes ExternalServerConfig to CopilotClient."""
         CopilotChatModel._shared_client = None
+        CopilotChatModel._shared_loop = None
 
         with patch("langchain_copilot.chat_models.CopilotClient") as mock_client_class:
             mock_client = AsyncMock()
@@ -163,6 +168,7 @@ class TestCopilotChatModel:
     async def test_get_client_with_cli_path(self):
         """Test that _get_client passes SubprocessConfig to CopilotClient."""
         CopilotChatModel._shared_client = None
+        CopilotChatModel._shared_loop = None
 
         with patch("langchain_copilot.chat_models.CopilotClient") as mock_client_class:
             mock_client = AsyncMock()
@@ -181,6 +187,7 @@ class TestCopilotChatModel:
     async def test_get_client_without_options(self):
         """Test that _get_client passes None to CopilotClient when no options set."""
         CopilotChatModel._shared_client = None
+        CopilotChatModel._shared_loop = None
 
         with patch("langchain_copilot.chat_models.CopilotClient") as mock_client_class:
             mock_client = AsyncMock()
@@ -195,6 +202,7 @@ class TestCopilotChatModel:
     async def test_agenerate(self):
         """Test async generation."""
         CopilotChatModel._shared_client = None
+        CopilotChatModel._shared_loop = None
 
         with patch("langchain_copilot.chat_models.CopilotClient") as mock_client_class:
             # Setup mocks
@@ -226,8 +234,8 @@ class TestCopilotChatModel:
             # Verify session was created and destroyed
             mock_client.create_session.assert_called_once()
             mock_session.send_and_wait.assert_called_once()
-            mock_session.destroy.assert_called_once()
-            mock_client.stop.assert_called_once()
+            mock_session.disconnect.assert_called_once()
+            mock_client.stop.assert_not_called()
 
     def test_model_alias(self):
         """Test that 'model' alias works for model_name."""
@@ -238,6 +246,7 @@ class TestCopilotChatModel:
     async def test_agenerate_with_system_message(self):
         """Test async generation with system messages."""
         CopilotChatModel._shared_client = None
+        CopilotChatModel._shared_loop = None
 
         with patch("langchain_copilot.chat_models.CopilotClient") as mock_client_class:
             # Setup mocks
@@ -281,8 +290,8 @@ class TestCopilotChatModel:
 
             # Verify cleanup
             mock_session.send_and_wait.assert_called_once()
-            mock_session.destroy.assert_called_once()
-            mock_client.stop.assert_called_once()
+            mock_session.disconnect.assert_called_once()
+            mock_client.stop.assert_not_called()
 
     def test_initialization_with_tools(self):
         """Test model initialization with tools."""
@@ -301,7 +310,7 @@ class TestCopilotChatModel:
             handler=mock_tool_handler,
         )
 
-        model = CopilotChatModel(model_name="gpt-4o", tools=[tool])
+        model = CopilotChatModel(model_name="gpt-5-mini", tools=[tool])
         assert model.tools is not None
         assert len(model.tools) == 1
         assert model.tools[0].name == "test_tool"
@@ -323,7 +332,7 @@ class TestCopilotChatModel:
             handler=mock_tool_handler,
         )
 
-        model = CopilotChatModel(model_name="gpt-4o", tools=[tool])
+        model = CopilotChatModel(model_name="gpt-5-mini", tools=[tool])
         config = model._create_session_config()
 
         assert "tools" in config
@@ -343,6 +352,7 @@ class TestCopilotChatModel:
         from copilot.tools import Tool
 
         CopilotChatModel._shared_client = None
+        CopilotChatModel._shared_loop = None
 
         async def mock_tool_handler(invocation):
             return {"textResultForLlm": "42", "resultType": "success"}
@@ -374,6 +384,7 @@ class TestCopilotChatModel:
 
             mock_client_class.return_value = mock_client
             mock_client.create_session = AsyncMock(return_value=mock_session)
+            mock_session.on = lambda callback: None
 
             model = CopilotChatModel(tools=[tool])
             messages = [HumanMessage(content="What is 21 + 21?")]
@@ -394,8 +405,8 @@ class TestCopilotChatModel:
 
             # Verify cleanup
             mock_session.send_and_wait.assert_called_once()
-            mock_session.destroy.assert_called_once()
-            mock_client.stop.assert_called_once()
+            mock_session.disconnect.assert_called_once()
+            mock_client.stop.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_astream_with_tools(self):
@@ -403,6 +414,7 @@ class TestCopilotChatModel:
         from copilot.tools import Tool
 
         CopilotChatModel._shared_client = None
+        CopilotChatModel._shared_loop = None
 
         async def mock_tool_handler(invocation):
             return {"textResultForLlm": "The weather is sunny", "resultType": "success"}
@@ -489,11 +501,12 @@ class TestCopilotChatModel:
             async for chunk in model._astream(messages):
                 chunks.append(chunk.message.content)
 
-            # Verify chunks were received
-            assert len(chunks) == 3
+            # Verify chunks were received (plus final empty metadata chunk)
+            assert len(chunks) == 4
             assert chunks[0] == "The weather "
             assert chunks[1] == "is sunny "
             assert chunks[2] == "in Paris"
+            assert chunks[3] == ""
 
             # Verify session was created with tools and streaming enabled
             mock_client.create_session.assert_called_once()
@@ -505,8 +518,8 @@ class TestCopilotChatModel:
             assert session_config["tools"][0].name == "get_weather"
 
             # Verify cleanup
-            mock_session.destroy.assert_called_once()
-            mock_client.stop.assert_called_once()
+            mock_session.disconnect.assert_called_once()
+            mock_client.stop.assert_not_called()
 
     def test_bind_tools_with_copilot_tool(self):
         """Test bind_tools with Copilot SDK Tool instances."""
@@ -524,7 +537,7 @@ class TestCopilotChatModel:
             handler=mock_handler,
         )
 
-        model = CopilotChatModel(model="gpt-4o")
+        model = CopilotChatModel(model="gpt-5-mini")
         bound_model = model.bind_tools([tool])
 
         # Should return a RunnableBinding
@@ -547,7 +560,7 @@ class TestCopilotChatModel:
         async def add_numbers(params: CalcParams) -> str:
             return str(params.a + params.b)
 
-        model = CopilotChatModel(model="gpt-4o")
+        model = CopilotChatModel(model="gpt-5-mini")
         bound_model = model.bind_tools([add_numbers])
 
         from langchain_core.runnables import RunnableBinding
@@ -564,7 +577,7 @@ class TestCopilotChatModel:
             """Search for information."""
             return f"Results for: {query}"
 
-        model = CopilotChatModel(model="gpt-4o")
+        model = CopilotChatModel(model="gpt-5-mini")
         bound_model = model.bind_tools([search])
 
         from langchain_core.runnables import RunnableBinding
@@ -582,7 +595,7 @@ class TestCopilotChatModel:
             """Double a number."""
             return x * 2
 
-        model = CopilotChatModel(model="gpt-4o")
+        model = CopilotChatModel(model="gpt-5-mini")
         bound_model = model.bind_tools([plain_function])
 
         from langchain_core.runnables import RunnableBinding
@@ -602,7 +615,7 @@ class TestCopilotChatModel:
             }
         }
 
-        model = CopilotChatModel(model="gpt-4o")
+        model = CopilotChatModel(model="gpt-5-mini")
 
         # Dict schemas are now skipped (no error raised)
         bound_model = model.bind_tools([tool_dict])
@@ -613,10 +626,75 @@ class TestCopilotChatModel:
         # No tools should be bound since dict schemas are skipped
         assert bound_model.kwargs.get("tools", []) == []
 
+    def test_batch_runs_sequentially(self):
+        """Test that batch uses sequential invoke calls."""
+        model = CopilotChatModel(model="gpt-5-mini")
+
+        with patch.object(
+            CopilotChatModel,
+            "invoke",
+            autospec=True,
+            side_effect=[AIMessage(content="first"), AIMessage(content="second")],
+        ) as mock_invoke:
+            result = model.batch(["Hello", "Hey"])
+
+        assert [message.content for message in result] == ["first", "second"]
+        assert [call.args[1] for call in mock_invoke.call_args_list] == ["Hello", "Hey"]
+
+    def test_batch_return_exceptions(self):
+        """Test that batch preserves return_exceptions behavior."""
+        model = CopilotChatModel(model="gpt-5-mini")
+
+        with patch.object(
+            CopilotChatModel,
+            "invoke",
+            autospec=True,
+            side_effect=[AIMessage(content="first"), ValueError("boom")],
+        ):
+            result = model.batch(["Hello", "Hey"], return_exceptions=True)
+
+        assert result[0].content == "first"
+        assert isinstance(result[1], ValueError)
+
+    @pytest.mark.asyncio
+    async def test_abatch_runs_sequentially(self):
+        """Test that abatch uses sequential ainvoke calls."""
+        model = CopilotChatModel(model="gpt-5-mini")
+
+        with patch.object(
+            CopilotChatModel,
+            "ainvoke",
+            new=AsyncMock(
+                side_effect=[AIMessage(content="first"), AIMessage(content="second")]
+            ),
+        ) as mock_ainvoke:
+            result = await model.abatch(["Hello", "Hey"])
+
+        assert [message.content for message in result] == ["first", "second"]
+        assert [call.args[0] for call in mock_ainvoke.call_args_list] == [
+            "Hello",
+            "Hey",
+        ]
+
+    @pytest.mark.asyncio
+    async def test_abatch_return_exceptions(self):
+        """Test that abatch preserves return_exceptions behavior."""
+        model = CopilotChatModel(model="gpt-5-mini")
+
+        with patch.object(
+            CopilotChatModel,
+            "ainvoke",
+            new=AsyncMock(side_effect=[AIMessage(content="first"), ValueError("boom")]),
+        ):
+            result = await model.abatch(["Hello", "Hey"], return_exceptions=True)
+
+        assert result[0].content == "first"
+        assert isinstance(result[1], ValueError)
+
     def test_bind_tools_preserves_model_config(self):
         """Test that bind_tools preserves other model configuration."""
         model = CopilotChatModel(
-            model="gpt-4o", temperature=0.7, max_tokens=1000, streaming=True
+            model="gpt-5-mini", temperature=0.7, max_tokens=1000, streaming=True
         )
 
         class TestParams(BaseModel):
@@ -632,7 +710,7 @@ class TestCopilotChatModel:
 
         assert isinstance(bound_model, RunnableBinding)
         # The bound object wraps the original model
-        assert bound_model.bound.model_name == "gpt-4o"
+        assert bound_model.bound.model_name == "gpt-5-mini"
         assert bound_model.bound.streaming is True
 
     def test_messages_to_prompt_with_only_system_messages(self):

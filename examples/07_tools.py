@@ -71,7 +71,7 @@ def main():
     print("=" * 60)
 
     # Create a model with tools
-    model = CopilotChatModel(model="gpt-4o", tools=[get_weather, calculator])
+    model = CopilotChatModel(model="gpt-5-mini", tools=[get_weather, calculator])
 
     # Example 1: Weather query
     print("\n[Query 1] Weather information:")
