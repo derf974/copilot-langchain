@@ -252,6 +252,18 @@ class CopilotChatModel(BaseChatModel):
             )
         return "\n\n".join(parts)
 
+    @staticmethod
+    def _select_primary_tool_calls(tool_calls: list[dict]) -> list[dict]:
+        """Return only the first tool-call intent emitted for a turn.
+
+        The Copilot SDK may emit multiple tool.execution_start events while it
+        self-corrects arguments for the same tool. LangChain's standard tests
+        expect a single tool call to execute, so we expose only the first intent.
+        """
+        if not tool_calls:
+            return []
+        return [tool_calls[0]]
+
     def _generate(
         self,
         messages: list[BaseMessage],
@@ -355,10 +367,13 @@ class CopilotChatModel(BaseChatModel):
             last_event = await session.send_and_wait(full_prompt)
 
             if captured_tool_calls:
+                primary_tool_calls = self._select_primary_tool_calls(
+                    captured_tool_calls
+                )
                 # Return tool-call intents so the LangChain caller can execute them
                 message = AIMessage(
                     content="",
-                    tool_calls=captured_tool_calls,
+                    tool_calls=primary_tool_calls,
                     response_metadata={"model_name": effective_model},
                 )
             else:
@@ -615,6 +630,9 @@ class CopilotChatModel(BaseChatModel):
 
             # Phase 3: yield the appropriate final chunk.
             if captured_tool_calls_stream:
+                primary_tool_calls = self._select_primary_tool_calls(
+                    captured_tool_calls_stream
+                )
                 # Emit tool-call intents as tool_call_chunks so they accumulate
                 # into AIMessage.tool_calls when the caller merges all chunks.
                 tool_call_chunks = [
@@ -625,7 +643,7 @@ class CopilotChatModel(BaseChatModel):
                         "index": i,
                         "type": "tool_call_chunk",
                     }
-                    for i, tc in enumerate(captured_tool_calls_stream)
+                    for i, tc in enumerate(primary_tool_calls)
                 ]
                 yield ChatGenerationChunk(
                     message=AIMessageChunk(
