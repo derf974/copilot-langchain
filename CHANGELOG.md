@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.9](https://github.com/derf974/copilot-langchain/compare/v0.2.8...v0.2.9) (2026-04-13)
+
+
+### Bug Fixes
+
+* integration tests fail ([#32](https://github.com/derf974/copilot-langchain/issues/32)) ([2922279](https://github.com/derf974/copilot-langchain/commit/2922279b9f1e5fb16446360d33094af4c4835fe8))
+
 ## [0.2.8](https://github.com/derf974/copilot-langchain/compare/v0.2.7...v0.2.8) (2026-04-11)
 
 
