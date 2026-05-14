@@ -3,7 +3,7 @@
 import asyncio
 import pytest
 from unittest.mock import AsyncMock, patch
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import tool
 from langchain_copilot import CopilotChatModel
 from copilot import define_tool
@@ -442,7 +442,7 @@ class TestCopilotChatModel:
                 stored_callback = callback
 
             # Configure session.send to trigger streaming events
-            async def mock_send(message):
+            async def mock_send(message, attachments=None):
                 # Simulate receiving streaming chunks
                 if stored_callback:
 
@@ -714,18 +714,18 @@ class TestCopilotChatModel:
         assert bound_model.bound.streaming is True
 
     def test_messages_to_prompt_with_only_system_messages(self):
-        """Test that _messages_to_prompt raises ValueError when only system messages are provided."""
+        """Test that prompt extraction rejects system-only inputs."""
         model = CopilotChatModel()
         messages = [SystemMessage(content="You are helpful.")]
 
         # SystemMessage are filtered out to prevent prompt injection
         with pytest.raises(ValueError) as exc_info:
-            model._messages_to_prompt(messages)
+            model._messages_to_prompt_and_attachments(messages)
 
         assert "No valid messages to send" in str(exc_info.value)
 
     def test_messages_to_prompt_with_mixed_messages(self):
-        """Test that _messages_to_prompt filters out system messages to prevent injection."""
+        """Test that prompt extraction filters out system messages."""
         model = CopilotChatModel()
         messages = [
             SystemMessage(content="System instruction"),
@@ -733,10 +733,175 @@ class TestCopilotChatModel:
             AIMessage(content="Hi there"),
         ]
 
-        result = model._messages_to_prompt(messages)
+        result, attachments = model._messages_to_prompt_and_attachments(messages)
 
         # SystemMessage should be filtered out (handled separately in session config)
         expected_prompt = "User: Hello\n\nAssistant: Hi there"
         assert result == expected_prompt
+        assert attachments == []
         # Ensure no system instruction leaked into the conversational prompt
         assert "System instruction" not in result
+
+    def test_messages_to_prompt_extracts_base64_image_attachment(self):
+        """Test that LangChain image blocks become Copilot blob attachments."""
+        model = CopilotChatModel()
+        messages = [
+            HumanMessage(
+                content=[
+                    {"type": "text", "text": "Describe this image."},
+                    {
+                        "type": "image",
+                        "base64": "ZmFrZS1pbWFnZQ==",
+                        "mime_type": "image/png",
+                    },
+                ]
+            )
+        ]
+
+        prompt, attachments = model._messages_to_prompt_and_attachments(messages)
+
+        assert prompt == "User: Describe this image."
+        assert attachments == [
+            {
+                "type": "blob",
+                "data": "ZmFrZS1pbWFnZQ==",
+                "mimeType": "image/png",
+            }
+        ]
+
+    def test_messages_to_prompt_extracts_data_url_image_attachment(self):
+        """Test that OpenAI-style data URLs are normalized to blob attachments."""
+        model = CopilotChatModel()
+        messages = [
+            HumanMessage(
+                content=[
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": "data:image/jpeg;base64,ZmFrZS1pbWFnZQ=="},
+                    }
+                ]
+            )
+        ]
+
+        prompt, attachments = model._messages_to_prompt_and_attachments(messages)
+
+        assert prompt == ""
+        assert attachments == [
+            {
+                "type": "blob",
+                "data": "ZmFrZS1pbWFnZQ==",
+                "mimeType": "image/jpeg",
+            }
+        ]
+
+    def test_messages_to_prompt_rejects_non_final_image_history(self):
+        """Test that historical image blocks raise a clear error."""
+        model = CopilotChatModel()
+        messages = [
+            HumanMessage(
+                content=[
+                    {
+                        "type": "image",
+                        "base64": "ZmFrZS1pbWFnZQ==",
+                        "mime_type": "image/png",
+                    }
+                ]
+            ),
+            AIMessage(content="What would you like to know?"),
+            HumanMessage(content="Tell me more."),
+        ]
+
+        with pytest.raises(ValueError) as exc_info:
+            model._messages_to_prompt_and_attachments(messages)
+
+        assert "final non-system message" in str(exc_info.value)
+
+    def test_messages_to_prompt_supports_final_tool_message_image(self):
+        """Test that final ToolMessage image content is converted to an attachment."""
+        model = CopilotChatModel()
+        messages = [
+            HumanMessage(content="Use the tool."),
+            AIMessage(
+                content=[],
+                tool_calls=[
+                    {
+                        "type": "tool_call",
+                        "id": "1",
+                        "name": "random_image",
+                        "args": {},
+                    }
+                ],
+            ),
+            ToolMessage(
+                content=[
+                    {
+                        "type": "image",
+                        "base64": "ZmFrZS1pbWFnZQ==",
+                        "mime_type": "image/png",
+                    }
+                ],
+                tool_call_id="1",
+                name="random_image",
+            ),
+        ]
+
+        prompt, attachments = model._messages_to_prompt_and_attachments(messages)
+
+        assert prompt == (
+            "User: Use the tool.\n\nAssistant: [Called tools: random_image({})]"
+        )
+        assert attachments == [
+            {
+                "type": "blob",
+                "data": "ZmFrZS1pbWFnZQ==",
+                "mimeType": "image/png",
+            }
+        ]
+
+    @pytest.mark.asyncio
+    async def test_agenerate_with_image_attachment(self):
+        """Test async generation forwards image attachments to the SDK."""
+        CopilotChatModel._shared_client = None
+        CopilotChatModel._shared_loop = None
+
+        with patch("langchain_copilot.chat_models.CopilotClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_session = AsyncMock()
+
+            class MockEvent:
+                class Data:
+                    content = "This looks like a diagram."
+
+                data = Data()
+
+            mock_session.send_and_wait = AsyncMock(return_value=MockEvent())
+            mock_client_class.return_value = mock_client
+            mock_client.create_session = AsyncMock(return_value=mock_session)
+
+            model = CopilotChatModel()
+            messages = [
+                HumanMessage(
+                    content=[
+                        {"type": "text", "text": "Describe this image."},
+                        {
+                            "type": "image",
+                            "base64": "ZmFrZS1pbWFnZQ==",
+                            "mime_type": "image/png",
+                        },
+                    ]
+                )
+            ]
+
+            result = await model._agenerate(messages)
+
+            assert result.generations[0].message.content == "This looks like a diagram."
+            mock_session.send_and_wait.assert_called_once_with(
+                "User: Describe this image.",
+                attachments=[
+                    {
+                        "type": "blob",
+                        "data": "ZmFrZS1pbWFnZQ==",
+                        "mimeType": "image/png",
+                    }
+                ],
+            )

@@ -67,12 +67,12 @@ class TestCopilotChatModelIntegration(ChatModelIntegrationTests):
 
     @property
     def supports_image_inputs(self) -> bool:
-        """CopilotChatModel does not support image inputs (yet)."""
-        return False
+        """CopilotChatModel supports base64 and data URL image inputs."""
+        return True
 
     @property
     def supports_image_urls(self) -> bool:
-        """CopilotChatModel does not support image URLs (yet)."""
+        """CopilotChatModel does not support remote image URLs yet."""
         return False
 
     @property
@@ -102,8 +102,8 @@ class TestCopilotChatModelIntegration(ChatModelIntegrationTests):
 
     @property
     def supports_image_tool_message(self) -> bool:
-        """CopilotChatModel does not support image tool messages."""
-        return False
+        """CopilotChatModel supports image tool messages for final tool outputs."""
+        return True
 
     @property
     def supports_pdf_tool_message(self) -> bool:

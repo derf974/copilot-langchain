@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any, AsyncIterator, ClassVar, Iterator, Optional, Union
 
 from langchain_core.callbacks import (
@@ -34,7 +34,7 @@ from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import ConfigDict, Field, model_validator
 
 from copilot import CopilotClient
-from copilot.session import PermissionHandler, SystemMessageReplaceConfig
+from copilot.session import Attachment, PermissionHandler, SystemMessageReplaceConfig
 from copilot.tools import Tool, ToolResult
 from copilot.client import ExternalServerConfig, SubprocessConfig
 
@@ -152,7 +152,7 @@ class CopilotChatModel(BaseChatModel):
 
         return CopilotChatModel._shared_client
 
-    def _convert_messages(self, messages: list[BaseMessage]) -> list[dict[str, str]]:
+    def _convert_messages(self, messages: list[BaseMessage]) -> list[dict[str, Any]]:
         """Convert LangChain messages to Copilot SDK format.
 
         Args:
@@ -213,11 +213,153 @@ class CopilotChatModel(BaseChatModel):
 
         return config_params
 
-    def _messages_to_prompt(self, messages: list[BaseMessage]) -> str:
+    @staticmethod
+    def _parse_image_data_url(data_url: str) -> tuple[str, str]:
+        """Extract MIME type and raw base64 payload from an image data URL."""
+        if not data_url.startswith("data:"):
+            raise ValueError(
+                "Remote image URLs are not supported yet. Use base64 image content "
+                "or a data URL."
+            )
+
+        try:
+            header, encoded_data = data_url[5:].split(",", 1)
+        except ValueError as exc:
+            raise ValueError("Invalid image data URL.") from exc
+
+        mime_type, separator, encoding = header.partition(";")
+        if separator == "" or encoding != "base64":
+            raise ValueError("Image data URLs must be base64-encoded.")
+        if not mime_type.startswith("image/"):
+            raise ValueError("Only image data URLs are supported.")
+        if not encoded_data:
+            raise ValueError("Image data URL must include base64 data.")
+
+        return mime_type, encoded_data
+
+    def _image_block_to_attachment(self, block: Mapping[str, Any]) -> Attachment:
+        """Convert a supported LangChain/OpenAI image block to an SDK attachment."""
+        block_type = block.get("type")
+
+        if block_type == "image":
+            if "url" in block:
+                raise ValueError(
+                    "Remote image URLs are not supported yet. Use base64 image "
+                    "content or a data URL."
+                )
+
+            base64_data = block.get("base64")
+            mime_type = block.get("mime_type")
+            if not isinstance(base64_data, str) or not base64_data:
+                raise ValueError(
+                    "Image content blocks must include a non-empty 'base64' field."
+                )
+            if not isinstance(mime_type, str) or not mime_type.startswith("image/"):
+                raise ValueError(
+                    "Image content blocks must include an image 'mime_type'."
+                )
+
+            return {"type": "blob", "data": base64_data, "mimeType": mime_type}
+
+        if block_type == "image_url":
+            image_url = block.get("image_url")
+            if not isinstance(image_url, Mapping):
+                raise ValueError(
+                    "image_url content blocks must include an 'image_url' mapping."
+                )
+
+            url = image_url.get("url")
+            if not isinstance(url, str) or not url:
+                raise ValueError(
+                    "image_url content blocks must include a non-empty URL."
+                )
+
+            mime_type, base64_data = self._parse_image_data_url(url)
+            return {"type": "blob", "data": base64_data, "mimeType": mime_type}
+
+        raise ValueError(f"Unsupported image block type: {block_type}")
+
+    def _extract_message_content(
+        self,
+        message: BaseMessage,
+        *,
+        allow_attachments: bool,
+    ) -> tuple[str, list[Attachment]]:
+        """Extract prompt text and supported attachments from a message."""
+        content = message.content
+
+        if isinstance(content, str):
+            return content, []
+
+        if not isinstance(content, list):
+            return str(content), []
+
+        text_parts: list[str] = []
+        attachments: list[Attachment] = []
+
+        for block in content:
+            if isinstance(block, str):
+                if block:
+                    text_parts.append(block)
+                continue
+
+            if not isinstance(block, Mapping):
+                raise ValueError(
+                    f"Unsupported message content block: {type(block).__name__}"
+                )
+
+            block_type = block.get("type")
+            if block_type == "text":
+                text = block.get("text")
+                if not isinstance(text, str):
+                    raise ValueError(
+                        "Text content blocks must include a string 'text'."
+                    )
+                if text:
+                    text_parts.append(text)
+            elif block_type in {"image", "image_url"}:
+                if not allow_attachments:
+                    raise ValueError(
+                        "Image content is only supported in the final non-system "
+                        "message of an invocation because CopilotChatModel replays "
+                        "earlier history as a single prompt."
+                    )
+                attachments.append(self._image_block_to_attachment(block))
+            else:
+                raise ValueError(
+                    f"Unsupported content block type: {block_type}. "
+                    "Only text and image blocks are supported."
+                )
+
+        return "\n".join(text_parts).strip(), attachments
+
+    def _messages_to_prompt_and_attachments(
+        self, messages: list[BaseMessage]
+    ) -> tuple[str, list[Attachment]]:
         parts = []
+        attachments: list[Attachment] = []
+        final_message_index = max(
+            (
+                index
+                for index, message in enumerate(messages)
+                if not isinstance(message, SystemMessage)
+            ),
+            default=-1,
+        )
+
         for msg in messages:
+            is_final_non_system = (
+                final_message_index != -1 and messages[final_message_index] is msg
+            )
+
             if isinstance(msg, HumanMessage):
-                parts.append(f"User: {msg.content}")
+                text, message_attachments = self._extract_message_content(
+                    msg,
+                    allow_attachments=is_final_non_system,
+                )
+                if text:
+                    parts.append(f"User: {text}")
+                attachments.extend(message_attachments)
             elif isinstance(msg, AIMessage):
                 if msg.tool_calls:
                     # Represent tool call intents so the model has context on turn 2+
@@ -227,30 +369,46 @@ class CopilotChatModel(BaseChatModel):
                     ]
                     parts.append(f"Assistant: [Called tools: {', '.join(tc_strs)}]")
                 elif msg.content:
-                    parts.append(f"Assistant: {msg.content}")
+                    text, _ = self._extract_message_content(
+                        msg,
+                        allow_attachments=False,
+                    )
+                    if text:
+                        parts.append(f"Assistant: {text}")
                 # Skip empty AIMessage with no tool calls (no useful content)
             elif isinstance(msg, ToolMessage):
+                text, message_attachments = self._extract_message_content(
+                    msg,
+                    allow_attachments=is_final_non_system,
+                )
                 tool_name = getattr(msg, "name", "") or ""
-                if tool_name:
-                    parts.append(f"Tool result ({tool_name}): {msg.content}")
-                else:
-                    parts.append(f"Tool result: {msg.content}")
+                if text:
+                    if tool_name:
+                        parts.append(f"Tool result ({tool_name}): {text}")
+                    else:
+                        parts.append(f"Tool result: {text}")
+                attachments.extend(message_attachments)
             elif isinstance(msg, SystemMessage):
                 # Skip SystemMessage - they are extracted separately in _create_session_config
                 # to avoid prompt injection risks
                 continue
             else:
                 # Fallback for other BaseMessage types to avoid dropping content
-                role = getattr(msg, "type", msg.__class__.__name__)
-                parts.append(f"{role.capitalize()}: {msg.content}")
-        if not parts:
+                text, _ = self._extract_message_content(
+                    msg,
+                    allow_attachments=False,
+                )
+                if text:
+                    role = getattr(msg, "type", msg.__class__.__name__)
+                    parts.append(f"{role.capitalize()}: {text}")
+        if not parts and not attachments:
             raise ValueError(
                 "No valid messages to send. Messages must contain at least one "
                 "HumanMessage, AIMessage, or ToolMessage. SystemMessage instances "
                 "are automatically extracted and passed to the session configuration, "
                 "but at least one conversational message is required to start the interaction."
             )
-        return "\n\n".join(parts)
+        return "\n\n".join(parts), attachments
 
     @staticmethod
     def _select_primary_tool_calls(tool_calls: list[dict]) -> list[dict]:
@@ -332,7 +490,9 @@ class CopilotChatModel(BaseChatModel):
         session = await client.create_session(**session_config)
 
         try:
-            full_prompt = self._messages_to_prompt(messages)
+            full_prompt, attachments = self._messages_to_prompt_and_attachments(
+                messages
+            )
 
             # Capture tool-call intents emitted during the Copilot agentic loop.
             # The Copilot SDK executes tools automatically inside the loop, but
@@ -364,7 +524,10 @@ class CopilotChatModel(BaseChatModel):
             if registered_tool_names:
                 session.on(_capture_tool_calls)
 
-            last_event = await session.send_and_wait(full_prompt)
+            last_event = await session.send_and_wait(
+                full_prompt,
+                attachments=attachments or None,
+            )
 
             if captured_tool_calls:
                 primary_tool_calls = self._select_primary_tool_calls(
@@ -529,7 +692,9 @@ class CopilotChatModel(BaseChatModel):
         session = await client.create_session(**session_config)
 
         try:
-            full_prompt = self._messages_to_prompt(messages)
+            full_prompt, attachments = self._messages_to_prompt_and_attachments(
+                messages
+            )
 
             # Queue to collect text chunks from streaming.
             chunk_queue: asyncio.Queue = asyncio.Queue()
@@ -594,7 +759,7 @@ class CopilotChatModel(BaseChatModel):
 
             # Register event listener and send the prompt
             session.on(on_event)
-            await session.send(full_prompt)
+            await session.send(full_prompt, attachments=attachments or None)
 
             # Phase 1: stream text chunks until the first turn ends.
             while not text_stream_done.is_set() or not chunk_queue.empty():
