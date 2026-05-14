@@ -10,6 +10,7 @@ LangChain integration for GitHub Copilot SDK - Use GitHub Copilot models in your
 - 🔗 **Full LangChain Integration**: Seamlessly use GitHub Copilot models with LangChain
 - 🚀 **Async & Sync Support**: Both synchronous and asynchronous operations
 - 📡 **Streaming**: Real-time streaming responses
+- 🖼️ **Image Inputs**: Base64 and data URL image attachments for multimodal prompts
 - 🔄 **Shared Client**: Optimized client management with lazy initialization
 - 🛠️ **Type Safe**: Full type hints with Pydantic validation
 - 🎯 **Easy to Use**: Simple API following LangChain conventions
@@ -103,6 +104,36 @@ async def main():
 
 asyncio.run(main())
 ```
+
+### Image Input
+
+```python
+from langchain_copilot import CopilotChatModel
+from langchain_core.messages import HumanMessage
+
+model = CopilotChatModel(model_name="gpt-5-mini")
+
+image_base64 = "..."  # base64-encoded PNG/JPG/GIF data
+
+messages = [
+    HumanMessage(
+        content=[
+            {"type": "text", "text": "Describe this image briefly."},
+            {
+                "type": "image",
+                "base64": image_base64,
+                "mime_type": "image/png",
+            },
+        ]
+    )
+]
+
+response = model.invoke(messages)
+print(response.content)
+```
+
+OpenAI-style `image_url` blocks are also supported when they contain a base64 data URL such as `data:image/png;base64,...`.
+Remote HTTP image URLs are not supported yet.
 
 ### Using in LangChain Chains
 
@@ -256,7 +287,7 @@ The integration test suite validates:
 - ✅ Model override at runtime
 - ❌ Tool calling (not yet supported)
 - ❌ Structured output (not yet supported)
-- ❌ Multimodal inputs (not yet supported)
+- ✅ Image inputs via base64/data URLs
 
 ### Running All Tests
 
