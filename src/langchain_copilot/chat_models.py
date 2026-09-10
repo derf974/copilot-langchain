@@ -128,11 +128,11 @@ class CopilotChatModel(BaseChatModel):
         if session_dict is not None:
             session_dict["_destroyed"] = True
         else:
-            setattr(session, "_destroyed", True)
+            session._destroyed = True
 
         try:
             await session.disconnect()
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             message = str(exc)
             if "Unhandled method session.detach" in message:
                 return

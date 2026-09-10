@@ -216,7 +216,9 @@ class TestCopilotChatModel:
 
         class DummySession:
             async def disconnect(self):
-                raise RuntimeError("JSON-RPC Error -32601: Unhandled method session.detach")
+                raise RuntimeError(
+                    "JSON-RPC Error -32601: Unhandled method session.detach"
+                )
 
         await CopilotChatModel._safe_disconnect_session(DummySession())
 
