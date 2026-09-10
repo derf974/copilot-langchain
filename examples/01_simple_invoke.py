@@ -1,7 +1,8 @@
 """Example 1: Simple synchronous invocation."""
 
-from langchain_copilot import CopilotChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
+
+from langchain_copilot import CopilotChatModel
 
 
 def main():

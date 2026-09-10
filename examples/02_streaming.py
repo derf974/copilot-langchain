@@ -1,7 +1,8 @@
 """Example 2: Streaming response."""
 
-from langchain_copilot import CopilotChatModel
 from langchain_core.messages import HumanMessage
+
+from langchain_copilot import CopilotChatModel
 
 
 def main():

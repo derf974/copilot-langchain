@@ -1,7 +1,8 @@
 from langchain.agents import create_agent
-from langgraph.checkpoint.memory import InMemorySaver
-from langchain_copilot import CopilotChatModel
 from langchain_core.runnables import RunnableConfig
+from langgraph.checkpoint.memory import InMemorySaver
+
+from langchain_copilot import CopilotChatModel
 
 agent = create_agent(
     model=CopilotChatModel(model="gpt-5-mini"),

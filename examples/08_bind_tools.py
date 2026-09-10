@@ -1,10 +1,11 @@
 """Example 8: Using bind_tools for LangChain integration."""
 
-from langchain_copilot import CopilotChatModel
+from copilot import define_tool
 from langchain_core.messages import HumanMessage
 from langchain_core.tools import tool
-from copilot import define_tool
 from pydantic import BaseModel, Field
+
+from langchain_copilot import CopilotChatModel
 
 
 # Method 1: Using Copilot SDK's @define_tool decorator
@@ -42,9 +43,9 @@ def search_web(query: str) -> str:
         "langchain": "LangChain is a framework for developing applications with LLMs...",
         "copilot": "GitHub Copilot is an AI pair programmer...",
     }
-    for key in results:
+    for key, value in results.items():
         if key in query.lower():
-            return results[key]
+            return value
     return f"No results found for: {query}"
 
 
@@ -73,8 +74,8 @@ def main():
 
     # You can also bind tools and use in chains
     print("\n[Query 3] Using in a chain:")
-    from langchain_core.prompts import ChatPromptTemplate
     from langchain_core.output_parsers import StrOutputParser
+    from langchain_core.prompts import ChatPromptTemplate
 
     prompt = ChatPromptTemplate.from_messages(
         [

@@ -7,8 +7,6 @@ To run these tests:
     uv run pytest tests/integration_tests/ -v -m integration
 """
 
-from typing import Type
-
 from langchain_tests.integration_tests import ChatModelIntegrationTests
 
 from langchain_copilot import CopilotChatModel
@@ -25,7 +23,7 @@ class TestCopilotChatModelIntegration(ChatModelIntegrationTests):
     """
 
     @property
-    def chat_model_class(self) -> Type[CopilotChatModel]:
+    def chat_model_class(self) -> type[CopilotChatModel]:
         """Return the chat model class to test."""
         return CopilotChatModel
 

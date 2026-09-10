@@ -1,9 +1,10 @@
 """Example 7: Using tools with Copilot."""
 
-from langchain_copilot import CopilotChatModel
-from langchain_core.messages import HumanMessage
 from copilot import define_tool
+from langchain_core.messages import HumanMessage
 from pydantic import BaseModel, Field
+
+from langchain_copilot import CopilotChatModel
 
 
 # Define a tool parameter schema using Pydantic

@@ -7,8 +7,6 @@ To run these tests:
     uv run pytest tests/unit_tests/ -v
 """
 
-from typing import Type
-
 from langchain_tests.unit_tests import ChatModelUnitTests
 
 from langchain_copilot import CopilotChatModel
@@ -25,7 +23,7 @@ class TestCopilotChatModelUnit(ChatModelUnitTests):
     """
 
     @property
-    def chat_model_class(self) -> Type[CopilotChatModel]:
+    def chat_model_class(self) -> type[CopilotChatModel]:
         """Return the chat model class to test."""
         return CopilotChatModel
 

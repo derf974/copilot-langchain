@@ -1,8 +1,9 @@
 """Example 5: Using in a LangChain chain."""
 
-from langchain_copilot import CopilotChatModel
-from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import ChatPromptTemplate
+
+from langchain_copilot import CopilotChatModel
 
 
 def main():
