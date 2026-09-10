@@ -610,7 +610,7 @@ class TestCopilotChatModel:
             async for chunk in model._astream(messages, run_manager=run_manager):
                 chunks.append(chunk.message.content)
 
-            assert chunks == ["Hello "]
+            assert chunks == ["Hello ", ""]
             assert run_manager.tokens == ["Hello "]
 
     def test_bind_tools_with_copilot_tool(self):
