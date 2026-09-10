@@ -7,7 +7,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 from langchain_core.tools import tool
 from langchain_copilot import CopilotChatModel
 from copilot import define_tool
-from copilot.client import ExternalServerConfig, SubprocessConfig
+from copilot.client import RuntimeConnection, StdioRuntimeConnection, UriRuntimeConnection
 from copilot.tools import Tool
 from pydantic import BaseModel, Field
 
@@ -147,7 +147,7 @@ class TestCopilotChatModel:
 
     @pytest.mark.asyncio
     async def test_get_client_with_cli_url(self):
-        """Test that _get_client passes ExternalServerConfig to CopilotClient."""
+        """Test that _get_client passes a URI runtime connection to CopilotClient."""
         CopilotChatModel._shared_client = None
         CopilotChatModel._shared_loop = None
 
@@ -160,13 +160,13 @@ class TestCopilotChatModel:
 
             mock_client_class.assert_called_once()
             call_args = mock_client_class.call_args
-            config = call_args[0][0]
-            assert isinstance(config, ExternalServerConfig)
+            config = call_args.kwargs["connection"]
+            assert isinstance(config, UriRuntimeConnection)
             assert config.url == "http://localhost:1234"
 
     @pytest.mark.asyncio
     async def test_get_client_with_cli_path(self):
-        """Test that _get_client passes SubprocessConfig to CopilotClient."""
+        """Test that _get_client passes a stdio runtime connection to CopilotClient."""
         CopilotChatModel._shared_client = None
         CopilotChatModel._shared_loop = None
 
@@ -179,13 +179,13 @@ class TestCopilotChatModel:
 
             mock_client_class.assert_called_once()
             call_args = mock_client_class.call_args
-            config = call_args[0][0]
-            assert isinstance(config, SubprocessConfig)
-            assert config.cli_path == "/usr/local/bin/copilot"
+            config = call_args.kwargs["connection"]
+            assert isinstance(config, StdioRuntimeConnection)
+            assert config.path == "/usr/local/bin/copilot"
 
     @pytest.mark.asyncio
     async def test_get_client_without_options(self):
-        """Test that _get_client passes None to CopilotClient when no options set."""
+        """Test that _get_client uses the default runtime connection when no options set."""
         CopilotChatModel._shared_client = None
         CopilotChatModel._shared_loop = None
 
@@ -196,7 +196,7 @@ class TestCopilotChatModel:
             model = CopilotChatModel()
             await model._get_client()
 
-            mock_client_class.assert_called_once_with(None)
+            mock_client_class.assert_called_once_with(connection=None)
 
     @pytest.mark.asyncio
     async def test_agenerate(self):

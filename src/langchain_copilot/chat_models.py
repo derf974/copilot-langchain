@@ -36,7 +36,7 @@ from pydantic import ConfigDict, Field, model_validator
 from copilot import CopilotClient
 from copilot.session import Attachment, PermissionHandler, SystemMessageReplaceConfig
 from copilot.tools import Tool, ToolResult
-from copilot.client import ExternalServerConfig, SubprocessConfig
+from copilot.client import RuntimeConnection
 
 import logging
 
@@ -132,11 +132,13 @@ class CopilotChatModel(BaseChatModel):
                 if CopilotChatModel._shared_client is None:
                     options = None
                     if self.cli_url:
-                        options = ExternalServerConfig(url=self.cli_url)
+                        options = RuntimeConnection.for_uri(self.cli_url)
                     elif self.cli_path:
-                        options = SubprocessConfig(cli_path=self.cli_path)
+                        options = RuntimeConnection.for_stdio(path=self.cli_path)
 
-                    CopilotChatModel._shared_client = CopilotClient(options or None)
+                    CopilotChatModel._shared_client = CopilotClient(
+                        connection=options
+                    )
 
                     # Suppress AssertionErrors from Copilot SDK event deserialization
                     def custom_exception_handler(loop, context):
