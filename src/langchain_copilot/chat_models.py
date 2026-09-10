@@ -3,17 +3,21 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable, Mapping, Sequence
-from typing import Any, AsyncIterator, ClassVar, Iterator, Optional, Union
+import json
+import logging
+from collections.abc import AsyncIterator, Callable, Iterator, Mapping, Sequence
+from typing import Any, ClassVar
 
+from copilot import CopilotClient
+from copilot.client import RuntimeConnection
+from copilot.session import Attachment, PermissionHandler, SystemMessageReplaceConfig
+from copilot.tools import Tool, ToolResult
 from langchain_core.callbacks import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
 )
 from langchain_core.language_models.base import LanguageModelInput
 from langchain_core.language_models.chat_models import BaseChatModel
-import json
-
 from langchain_core.messages import (
     AIMessage,
     AIMessageChunk,
@@ -32,13 +36,6 @@ from langchain_core.runnables import (
 from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import ConfigDict, Field, model_validator
-
-from copilot import CopilotClient
-from copilot.session import Attachment, PermissionHandler, SystemMessageReplaceConfig
-from copilot.tools import Tool, ToolResult
-from copilot.client import RuntimeConnection
-
-import logging
 
 # Suppress AssertionError logging from the Copilot SDK's event deserialization
 # This is a workaround for a bug in the SDK where some events have unexpected context types
@@ -75,16 +72,16 @@ class CopilotChatModel(BaseChatModel):
 
     model_name: str = Field(default="gpt-5-mini", alias="model")
     streaming: bool = Field(default=False)
-    cli_path: Optional[str] = Field(default=None)
-    cli_url: Optional[str] = Field(default=None)
-    temperature: Optional[float] = Field(default=None)
-    max_tokens: Optional[int] = Field(default=None)
-    tools: Optional[list[Tool]] = Field(default=None)
+    cli_path: str | None = Field(default=None)
+    cli_url: str | None = Field(default=None)
+    temperature: float | None = Field(default=None)
+    max_tokens: int | None = Field(default=None)
+    tools: list[Tool] | None = Field(default=None)
 
     # Internal shared client (class variable)
-    _shared_client: ClassVar[Optional[CopilotClient]] = None
-    _client_lock: ClassVar[Optional[asyncio.Lock]] = None
-    _shared_loop: ClassVar[Optional[asyncio.AbstractEventLoop]] = None
+    _shared_client: ClassVar[CopilotClient | None] = None
+    _client_lock: ClassVar[asyncio.Lock | None] = None
+    _shared_loop: ClassVar[asyncio.AbstractEventLoop | None] = None
 
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
@@ -92,7 +89,7 @@ class CopilotChatModel(BaseChatModel):
     )
 
     @model_validator(mode="after")
-    def _initialize_lock(self) -> "CopilotChatModel":
+    def _initialize_lock(self) -> CopilotChatModel:
         """Initialize the async lock for client management."""
         if CopilotChatModel._client_lock is None:
             CopilotChatModel._client_lock = asyncio.Lock()
@@ -136,9 +133,7 @@ class CopilotChatModel(BaseChatModel):
                     elif self.cli_path:
                         options = RuntimeConnection.for_stdio(path=self.cli_path)
 
-                    CopilotChatModel._shared_client = CopilotClient(
-                        connection=options
-                    )
+                    CopilotChatModel._shared_client = CopilotClient(connection=options)
 
                     # Suppress AssertionErrors from Copilot SDK event deserialization
                     def custom_exception_handler(loop, context):
@@ -180,7 +175,7 @@ class CopilotChatModel(BaseChatModel):
         return converted
 
     def _create_session_config(
-        self, messages: Optional[list[BaseMessage]] = None, **kwargs: Any
+        self, messages: list[BaseMessage] | None = None, **kwargs: Any
     ) -> dict[str, Any]:
         """Create session configuration for Copilot SDK.
 
@@ -306,7 +301,7 @@ class CopilotChatModel(BaseChatModel):
                 continue
 
             if not isinstance(block, Mapping):
-                raise ValueError(
+                raise TypeError(
                     f"Unsupported message content block: {type(block).__name__}"
                 )
 
@@ -427,8 +422,8 @@ class CopilotChatModel(BaseChatModel):
     def _generate(
         self,
         messages: list[BaseMessage],
-        stop: Optional[list[str]] = None,
-        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        stop: list[str] | None = None,
+        run_manager: CallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> ChatResult:
         """Generate response synchronously.
@@ -464,8 +459,8 @@ class CopilotChatModel(BaseChatModel):
     async def _agenerate(
         self,
         messages: list[BaseMessage],
-        stop: Optional[list[str]] = None,
-        run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
+        stop: list[str] | None = None,
+        run_manager: AsyncCallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> ChatResult:
         """Generate response asynchronously.
@@ -583,7 +578,7 @@ class CopilotChatModel(BaseChatModel):
             if return_exceptions:
                 try:
                     results.append(self.invoke(input_, config=input_config, **kwargs))
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001
                     results.append(exc)
             else:
                 results.append(self.invoke(input_, config=input_config, **kwargs))
@@ -611,7 +606,7 @@ class CopilotChatModel(BaseChatModel):
                     results.append(
                         await self.ainvoke(input_, config=input_config, **kwargs)
                     )
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001
                     results.append(exc)
             else:
                 results.append(
@@ -623,8 +618,8 @@ class CopilotChatModel(BaseChatModel):
     def _stream(
         self,
         messages: list[BaseMessage],
-        stop: Optional[list[str]] = None,
-        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        stop: list[str] | None = None,
+        run_manager: CallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> Iterator[ChatGenerationChunk]:
         """Stream response synchronously.
@@ -657,14 +652,13 @@ class CopilotChatModel(BaseChatModel):
                 chunks.append(chunk)
             return chunks
 
-        for chunk in asyncio.run(_collect_all()):
-            yield chunk
+        yield from asyncio.run(_collect_all())
 
     async def _astream(
         self,
         messages: list[BaseMessage],
-        stop: Optional[list[str]] = None,
-        run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
+        stop: list[str] | None = None,
+        run_manager: AsyncCallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[ChatGenerationChunk]:
         """Stream response asynchronously.
@@ -783,7 +777,7 @@ class CopilotChatModel(BaseChatModel):
 
                     yield chunk
 
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     continue
 
             # Phase 2: if tools are registered, wait for tool.execution_start
@@ -792,7 +786,7 @@ class CopilotChatModel(BaseChatModel):
             if registered_tool_names_stream and not complete.is_set():
                 try:
                     await asyncio.wait_for(complete.wait(), timeout=30.0)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     pass  # Give up; no tool calls detected
 
             # Phase 3: yield the appropriate final chunk.
@@ -835,9 +829,9 @@ class CopilotChatModel(BaseChatModel):
 
     def bind_tools(
         self,
-        tools: Sequence[Union[dict[str, Any], type, Callable, BaseTool]],
+        tools: Sequence[dict[str, Any] | type | Callable | BaseTool],
         *,
-        tool_choice: Optional[str] = None,
+        tool_choice: str | None = None,
         **kwargs: Any,
     ) -> Runnable[LanguageModelInput, AIMessage]:
         """Bind tools to the model.
@@ -902,9 +896,9 @@ class CopilotChatModel(BaseChatModel):
                                 text_result_for_llm=str(result),
                                 result_type="success",
                             )
-                        except Exception as e:
+                        except Exception as e:  # noqa: BLE001
                             return ToolResult(
-                                text_result_for_llm=f"Error: {str(e)}",
+                                text_result_for_llm=f"Error: {e!s}",
                                 result_type="failure",
                                 error=str(e),
                             )
@@ -943,9 +937,9 @@ class CopilotChatModel(BaseChatModel):
                                         text_result_for_llm=str(result),
                                         result_type="success",
                                     )
-                                except Exception as e:
+                                except Exception as e:  # noqa: BLE001
                                     return ToolResult(
-                                        text_result_for_llm=f"Error: {str(e)}",
+                                        text_result_for_llm=f"Error: {e!s}",
                                         result_type="failure",
                                         error=str(e),
                                     )
@@ -960,7 +954,7 @@ class CopilotChatModel(BaseChatModel):
                             overrides_built_in_tool=True,
                         )
                         copilot_tools.append(copilot_tool)
-                    except Exception as e:
+                    except Exception as e:  # noqa: BLE001
                         raise ValueError(
                             f"Failed to convert callable {tool} to Copilot tool: {e}"
                         )
@@ -997,12 +991,12 @@ class CopilotChatModel(BaseChatModel):
                 except ValueError:
                     # Re-raise our custom error
                     raise
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     raise ValueError(
                         f"Failed to convert Pydantic class {tool} to tool schema: {e}"
                     )
             else:
-                raise ValueError(f"Unsupported tool type: {type(tool)}")
+                raise TypeError(f"Unsupported tool type: {type(tool)}")
 
         # Return a RunnableBinding with the tools bound as kwargs
         # This is the standard LangChain pattern

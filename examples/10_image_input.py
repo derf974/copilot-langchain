@@ -1,8 +1,9 @@
 import base64
 from pathlib import Path
 
-from langchain_copilot import CopilotChatModel
 from langchain_core.messages import HumanMessage
+
+from langchain_copilot import CopilotChatModel
 
 model = CopilotChatModel(model_name="gpt-5-mini")
 

@@ -1,15 +1,20 @@
 """Tests for CopilotChatModel."""
 
 import asyncio
-import pytest
 from unittest.mock import AsyncMock, patch
+
+import pytest
+from copilot import define_tool
+from copilot.client import (
+    StdioRuntimeConnection,
+    UriRuntimeConnection,
+)
+from copilot.tools import Tool
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import tool
-from langchain_copilot import CopilotChatModel
-from copilot import define_tool
-from copilot.client import RuntimeConnection, StdioRuntimeConnection, UriRuntimeConnection
-from copilot.tools import Tool
 from pydantic import BaseModel, Field
+
+from langchain_copilot import CopilotChatModel
 
 
 class TestCopilotChatModel:

@@ -1,8 +1,10 @@
 """Example 3: Asynchronous invocation."""
 
 import asyncio
-from langchain_copilot import CopilotChatModel
+
 from langchain_core.messages import HumanMessage
+
+from langchain_copilot import CopilotChatModel
 
 
 async def main():

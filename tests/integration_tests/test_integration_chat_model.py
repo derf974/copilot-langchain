@@ -2,6 +2,7 @@
 
 import pytest
 from langchain_core.messages import HumanMessage
+
 from langchain_copilot import CopilotChatModel
 
 
@@ -49,8 +50,8 @@ class TestCopilotChatModelIntegration:
     @pytest.mark.integration
     def test_real_chain_with_system_message(self):
         """Test real LangChain chain with system messages (requires Copilot CLI)."""
-        from langchain_core.prompts import ChatPromptTemplate
         from langchain_core.output_parsers import StrOutputParser
+        from langchain_core.prompts import ChatPromptTemplate
 
         model = CopilotChatModel(model_name="gpt-5-mini")
 

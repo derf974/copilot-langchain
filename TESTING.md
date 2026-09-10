@@ -192,7 +192,7 @@ class TestCopilotChatModelIntegration(ChatModelIntegrationTests):
 
 ### Version Pinning
 
-The project pins `langchain-tests>=1.0.0` to ensure test stability. When updating:
+The project pins `langchain-tests>=1.1.9` to ensure test stability. When updating:
 
 ```bash
 # Update langchain-tests

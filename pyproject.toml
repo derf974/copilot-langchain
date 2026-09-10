@@ -48,6 +48,9 @@ packages = ["src/langchain_copilot"]
 [tool.hatch.version]
 path = "src/langchain_copilot/__init__.py"
 
+[tool.black]
+target-version = ["py313"]
+
 [dependency-groups]
 dev = [
     "black>=26.5.1",
