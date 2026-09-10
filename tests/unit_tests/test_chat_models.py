@@ -189,8 +189,8 @@ class TestCopilotChatModel:
             assert config.path == "/usr/local/bin/copilot"
 
     @pytest.mark.asyncio
-    async def test_get_client_without_options(self):
-        """Test that _get_client uses the default runtime connection when no options set."""
+    async def test_get_client_without_options_prefers_installed_cli(self):
+        """Test that _get_client uses an installed Copilot CLI when available."""
         CopilotChatModel._shared_client = None
         CopilotChatModel._shared_loop = None
 
@@ -198,10 +198,27 @@ class TestCopilotChatModel:
             mock_client = AsyncMock()
             mock_client_class.return_value = mock_client
 
-            model = CopilotChatModel()
-            await model._get_client()
+            with patch(
+                "langchain_copilot.chat_models.shutil.which",
+                return_value="/usr/local/bin/copilot",
+            ):
+                model = CopilotChatModel()
+                await model._get_client()
 
-            mock_client_class.assert_called_once_with(connection=None)
+            mock_client_class.assert_called_once()
+            args = mock_client_class.call_args.kwargs["connection"]
+            assert isinstance(args, StdioRuntimeConnection)
+            assert args.path == "/usr/local/bin/copilot"
+
+    @pytest.mark.asyncio
+    async def test_safe_disconnect_session_ignores_unsupported_detach(self):
+        """Test that incompatible Copilot runtimes don't fail session teardown."""
+
+        class DummySession:
+            async def disconnect(self):
+                raise RuntimeError("JSON-RPC Error -32601: Unhandled method session.detach")
+
+        await CopilotChatModel._safe_disconnect_session(DummySession())
 
     @pytest.mark.asyncio
     async def test_agenerate(self):
@@ -525,6 +542,74 @@ class TestCopilotChatModel:
             # Verify cleanup
             mock_session.disconnect.assert_called_once()
             mock_client.stop.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_astream_with_sync_run_manager(self):
+        """Test async streaming when run_manager callback is synchronous."""
+        CopilotChatModel._shared_client = None
+        CopilotChatModel._shared_loop = None
+
+        with patch("langchain_copilot.chat_models.CopilotClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_session = AsyncMock()
+            stored_callback = None
+
+            def mock_on(callback):
+                nonlocal stored_callback
+                stored_callback = callback
+
+            async def mock_send(message, attachments=None):
+                if stored_callback:
+
+                    class MockDeltaEvent:
+                        class Type:
+                            value = "assistant.message_delta"
+
+                        type = Type()
+
+                        class Data:
+                            delta_content = "Hello "
+
+                        data = Data()
+
+                    class MockFinalEvent:
+                        class Type:
+                            value = "assistant.message"
+
+                        type = Type()
+
+                        class Data:
+                            content = "Hello world"
+
+                        data = Data()
+
+                    await asyncio.sleep(0.01)
+                    stored_callback(MockDeltaEvent())
+                    await asyncio.sleep(0.01)
+                    stored_callback(MockFinalEvent())
+
+            class SyncRunManager:
+                def __init__(self):
+                    self.tokens: list[str] = []
+
+                def on_llm_new_token(self, token: str) -> None:
+                    self.tokens.append(token)
+
+            mock_session.on = mock_on
+            mock_session.send = mock_send
+            mock_client_class.return_value = mock_client
+            mock_client.create_session = AsyncMock(return_value=mock_session)
+
+            model = CopilotChatModel(streaming=True)
+            messages = [HumanMessage(content="Say hello")]
+            run_manager = SyncRunManager()
+
+            chunks = []
+            async for chunk in model._astream(messages, run_manager=run_manager):
+                chunks.append(chunk.message.content)
+
+            assert chunks == ["Hello "]
+            assert run_manager.tokens == ["Hello "]
 
     def test_bind_tools_with_copilot_tool(self):
         """Test bind_tools with Copilot SDK Tool instances."""

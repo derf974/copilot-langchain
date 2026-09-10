@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import logging
+import os
+import shutil
 from collections.abc import AsyncIterator, Callable, Iterator, Mapping, Sequence
 from typing import Any, ClassVar
 
@@ -95,6 +98,46 @@ class CopilotChatModel(BaseChatModel):
             CopilotChatModel._client_lock = asyncio.Lock()
         return self
 
+    @staticmethod
+    def _resolve_default_cli_path() -> str | None:
+        """Return a usable local Copilot CLI, if one is already installed.
+
+        Prefer the explicit ``COPILOT_CLI_PATH`` override and then fall back to the
+        first ``copilot`` binary visible on PATH. This avoids unnecessary
+        auto-download attempts in environments where the CLI is already installed.
+        """
+        env_path = os.getenv("COPILOT_CLI_PATH")
+        if env_path:
+            return env_path
+        return shutil.which("copilot")
+
+    @staticmethod
+    async def _safe_disconnect_session(session: Any) -> None:
+        """Close a Copilot SDK session without crashing on older runtime versions.
+
+        The installed Copilot CLI can reject ``session.detach`` with
+        ``Unhandled method session.detach`` even though the session was otherwise
+        created and processed successfully. Mark the session destroyed before the
+        detach RPC is attempted so the runtime short-circuits the unsupported call
+        instead of emitting a noisy traceback.
+        """
+        session_dict = getattr(session, "__dict__", None)
+        if session_dict is not None and session_dict.get("_destroyed"):
+            return
+
+        if session_dict is not None:
+            session_dict["_destroyed"] = True
+        else:
+            setattr(session, "_destroyed", True)
+
+        try:
+            await session.disconnect()
+        except Exception as exc:  # noqa: BLE001
+            message = str(exc)
+            if "Unhandled method session.detach" in message:
+                return
+            raise
+
     @property
     def _llm_type(self) -> str:
         """Return type of chat model."""
@@ -132,6 +175,10 @@ class CopilotChatModel(BaseChatModel):
                         options = RuntimeConnection.for_uri(self.cli_url)
                     elif self.cli_path:
                         options = RuntimeConnection.for_stdio(path=self.cli_path)
+                    else:
+                        detected_cli = self._resolve_default_cli_path()
+                        if detected_cli:
+                            options = RuntimeConnection.for_stdio(path=detected_cli)
 
                     CopilotChatModel._shared_client = CopilotClient(connection=options)
 
@@ -551,8 +598,10 @@ class CopilotChatModel(BaseChatModel):
             return ChatResult(generations=[generation])
 
         finally:
-            # Disconnect session only; the shared client stays alive for reuse
-            await session.disconnect()
+            # Disconnect session only; the shared client stays alive for reuse.
+            # Some Copilot CLI runtimes reject the detach RPC, so fall back to a
+            # compatibility-safe no-op rather than failing the request.
+            await self._safe_disconnect_session(session)
 
     def batch(
         self,
@@ -773,7 +822,9 @@ class CopilotChatModel(BaseChatModel):
                     )
 
                     if run_manager:
-                        await run_manager.on_llm_new_token(chunk_content)
+                        callback_result = run_manager.on_llm_new_token(chunk_content)
+                        if inspect.isawaitable(callback_result):
+                            await callback_result
 
                     yield chunk
 
@@ -824,8 +875,10 @@ class CopilotChatModel(BaseChatModel):
                 )
 
         finally:
-            # Disconnect session only; the shared client stays alive for reuse
-            await session.disconnect()
+            # Disconnect session only; the shared client stays alive for reuse.
+            # Some Copilot CLI runtimes reject the detach RPC, so fall back to a
+            # compatibility-safe no-op rather than failing the request.
+            await self._safe_disconnect_session(session)
 
     def bind_tools(
         self,
